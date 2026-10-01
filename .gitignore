@@ -12,3 +12,4 @@ cloud/staticfiles/
 client/build_info.py
 server.env
 .venv-build/
+release/

@@ -17,6 +17,8 @@
     {% if show_outbox %}<a href="{% url 'inbox' %}" class="{% if active == 'inbox' %}active{% endif %}" aria-label="Inbox">{% icon "mail" %}<span class="tip">Inbox (development)</span></a>{% endif %}
     <a href="{% url 'devices' %}" class="{% if active == 'devices' %}active{% endif %}" aria-label="Devices">{% icon "devices" %}<span class="tip">Devices</span></a>
     <a href="{% url 'subscription' %}" class="{% if active == 'subscription' %}active{% endif %}" aria-label="Subscription">{% icon "subscription" %}<span class="tip">Subscription</span></a>
+    <a href="{% url 'support' %}" class="{% if active == 'support' %}active{% endif %}" aria-label="Support">{% icon "support" %}{% if support_unread %}<span class="dot-new"></span>{% endif %}<span class="tip">Support</span></a>
+    {% if user.is_staff or user.is_superuser %}<a href="{% url 'staff' %}" class="{% if active == 'staff' %}active{% endif %}" aria-label="Staff console">{% icon "staff" %}{% if staff_open %}<span class="dot-new"></span>{% endif %}<span class="tip">Staff console</span></a>{% endif %}
     <div class="spacer"></div>
     <a href="{% url 'account' %}" class="{% if active == 'account' %}active{% endif %}" aria-label="Account">{% icon "account" %}<span class="tip">Account</span></a>
     <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}

@@ -1,0 +1,31 @@
+{% extends "cloud/base.html" %}
+{% block title %}Employees{% endblock %}
+{% block titlebar %}Staff console › Employees{% endblock %}
+{% block content %}
+<h1>Employees</h1>
+{% include "support/_staff_tabs.html" %}
+<div class="row">
+  <div class="card" style="flex:1.6">
+    <h2 style="margin-top:0">Team</h2>
+    <table class="grid"><thead><tr><th>Name</th><th>E-mail</th><th>Role</th><th class="num">Open tickets</th><th>Last sign-in</th><th></th></tr></thead>
+      <tbody>{% for e in staff %}
+        <tr><td class="name">{{ e.label }} <span class="muted">@{{ e.username }}</span></td><td>{{ e.email }}</td>
+          <td>{% if e.is_superuser %}<span class="pill active">Platform admin</span>{% else %}<span class="pill completed">Support</span>{% endif %}
+              {% if not e.is_active %}<span class="pill failed">deactivated</span>{% endif %}</td>
+          <td class="num">{{ e.open_n }}</td><td>{{ e.last_login|date:"Y-m-d H:i"|default:"—" }}</td>
+          <td>{% if not e.is_superuser %}<form method="post" style="margin:0">{% csrf_token %}<button class="btn small {% if e.is_active %}danger{% else %}secondary{% endif %}" name="toggle" value="{{ e.pk }}">{% if e.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>{% endif %}</td></tr>
+      {% endfor %}</tbody></table>
+  </div>
+  <div class="card" style="flex:1">
+    <h2 style="margin-top:0">Add an employee</h2>
+    <form method="post">{% csrf_token %}
+      <label>Name</label><input name="display_name" style="width:100%" placeholder="e.g. Priya – Support">
+      <label>Username</label><input name="username" required style="width:100%">
+      <label>E-mail</label><input name="email" type="email" required style="width:100%">
+      <label>Password</label><input name="password" type="password" required minlength="8" style="width:100%">
+      <button class="btn" style="margin-top:14px">Create employee</button>
+    </form>
+    <p class="muted" style="margin-top:12px">Employees can see users and subscriptions and answer support tickets. They cannot change subscriptions or add employees.</p>
+  </div>
+</div>
+{% endblock %}

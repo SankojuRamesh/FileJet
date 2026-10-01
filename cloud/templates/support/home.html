@@ -1,0 +1,33 @@
+{% extends "cloud/base.html" %}
+{% block title %}Support{% endblock %}
+{% block titlebar %}Support{% endblock %}
+{% block content %}
+<h1>Support</h1>
+<div class="row">
+  <div class="card" style="flex:1.3">
+    <h2 style="margin-top:0">My requests</h2>
+    <div class="table-wrap"><table class="grid">
+      <thead><tr><th>#</th><th>Subject</th><th>Topic</th><th>Status</th><th>Last update</th></tr></thead>
+      <tbody>{% for t in tickets %}
+        <tr><td class="mono"><a href="{% url 'support_ticket' t.pk %}">{{ t.number }}</a></td>
+          <td class="name"><a href="{% url 'support_ticket' t.pk %}">{{ t.subject }}</a>{% if t.user_unread %} <span class="badge-new">{{ t.user_unread }} new</span>{% endif %}</td>
+          <td>{{ t.get_category_display }}</td>
+          <td><span class="pill t-{{ t.status }}">{{ t.get_status_display }}</span></td>
+          <td>{{ t.last_message_at|date:"Y-m-d H:i" }}</td></tr>
+      {% empty %}<tr><td colspan="5" class="empty">No requests yet.</td></tr>{% endfor %}
+      </tbody></table></div>
+  </div>
+  <div class="card" style="flex:1">
+    <h2 style="margin-top:0">New request</h2>
+    <form method="post">{% csrf_token %}
+      <label for="cat">Topic</label>
+      <select id="cat" name="category" style="width:100%">{% for v, l in categories %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+      <label for="subj">Subject</label>
+      <input id="subj" name="subject" maxlength="150" required style="width:100%" placeholder="e.g. Transfer stops at 80%">
+      <label for="msg">Describe the issue</label>
+      <textarea id="msg" name="message" rows="7" maxlength="5000" required style="width:100%" placeholder="What happened, what did you expect, any error message…"></textarea>
+      <button class="btn" style="margin-top:14px">{% load cloud_ui %}{% icon "check" 14 %} Send to support</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

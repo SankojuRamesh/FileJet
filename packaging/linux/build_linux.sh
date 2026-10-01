@@ -2,7 +2,7 @@
 # Build the FileJet desktop app for Linux (Ubuntu/Debian, x86_64) - run ON an Ubuntu machine.
 #
 #   bash packaging/linux/build_linux.sh
-#   bash packaging/linux/build_linux.sh --cloud-url http://iotgateway.live/ --signal-url ws://13.204.80.52:8765/ws
+#   bash packaging/linux/build_linux.sh --cloud-url http://iotgateway.live/ --signal-url ws://iotgateway.live:8765/ws
 #
 # Produces in dist/:
 #   FileJet                          single-file program  (run: ./FileJet)

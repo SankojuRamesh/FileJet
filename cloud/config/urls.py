@@ -9,9 +9,11 @@ urlpatterns = [
     path("api/billing/", include("billing.api_urls")),
     path("api/transfers/", include("transfers.api_urls")),
     path("api/folders/", include(sharing_api)),
+    path("api/support/", include("support.api_urls")),
     path("", include("website.urls")),
     path("", include("accounts.urls")),
     path("", include("billing.urls")),
     path("", include("transfers.urls")),
     path("", include("sharing.urls")),
+    path("", include("support.urls")),
 ]

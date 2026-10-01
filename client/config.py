@@ -20,7 +20,7 @@ def _default_data_dir() -> Path:
 
 @dataclass
 class ClientConfig:
-    server_url: str = field(default_factory=lambda: os.environ.get("P2P_SERVER", "ws://iotgateway.live/ws"))
+    server_url: str = field(default_factory=lambda: os.environ.get("P2P_SERVER", "ws://iotgateway.live:8765/ws"))
     access_key: str | None = field(default_factory=lambda: os.environ.get("P2P_ACCESS_KEY"))
     token_provider: object = None         # callable -> current cloud signal token (desktop apps)
     signal_ca: str | None = None          # CA bundle for a wss:// server with a private CA

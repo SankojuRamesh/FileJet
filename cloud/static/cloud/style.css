@@ -171,3 +171,29 @@ label { display: block; margin: 10px 0 4px; color: #bbbbbb; }
   .search input { width: 100%; }
   .statusbar .hide-sm { display: none; }
 }
+
+/* support & staff console */
+.tabs-bar { display: flex; gap: 4px; align-items: center; border-bottom: 1px solid var(--border); margin: 0 0 16px; flex-wrap: wrap; }
+.tabs-bar a { padding: 8px 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs-bar a:hover { color: var(--text-strong); text-decoration: none; }
+.tabs-bar a.on { color: var(--text-strong); border-bottom-color: var(--accent); }
+.tabs-bar .grow { flex: 1; }
+.badge-new { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 9px; font-size: 11px; background: var(--accent); color: #fff; }
+.activity a { position: relative; }
+.dot-new { position: absolute; top: 11px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: #f0716b; box-shadow: 0 0 0 2px var(--activity); }
+.pill.t-open { color: var(--info); } .pill.t-waiting { color: var(--warn); } .pill.t-closed { color: var(--muted); }
+.warn { color: var(--warn); font-weight: 600; }
+table.grid.kv td { white-space: normal; }
+textarea { background: var(--input); color: var(--text); border: 1px solid transparent; border-radius: 2px; padding: 8px; font: inherit; resize: vertical; }
+textarea:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+.convo { display: flex; flex-direction: column; gap: 10px; }
+.bubble { max-width: 78%; padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
+.bubble .who { font-size: 12px; color: var(--info); margin-bottom: 4px; }
+.bubble .when { color: var(--muted); margin-left: 8px; }
+.bubble .body { color: var(--text-strong); white-space: normal; word-wrap: break-word; }
+.bubble.user { align-self: flex-end; background: #04395e; border-color: #0b5a8c; }
+.bubble.user .who { color: #b9dcff; }
+.bubble.staff { align-self: flex-start; }
+.bubble.sv.user { align-self: flex-start; background: var(--panel); border-color: var(--border); }
+.bubble.sv.user .who { color: var(--info); }
+.bubble.sv.staff { align-self: flex-end; background: #04395e; border-color: #0b5a8c; }

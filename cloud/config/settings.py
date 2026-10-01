@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "transfers",
     "sharing",
     "website",
+    "support",
 ]
 
 MIDDLEWARE = [
@@ -144,6 +145,7 @@ REST_FRAMEWORK = {
         "user": os.environ.get("THROTTLE_USER", "1200/min"),
         "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
         "register": os.environ.get("THROTTLE_REGISTER", "5/min"),
+        "support": os.environ.get("THROTTLE_SUPPORT", "60/hour"),
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
@@ -163,9 +165,11 @@ SIGNAL_JWT_SECRET = os.environ.get("P2P_CLOUD_JWT_SECRET", "dev-signal-secret-ch
 if not DEBUG and SIGNAL_JWT_SECRET.startswith("dev-"):
     raise ImproperlyConfigured("Set P2P_CLOUD_JWT_SECRET in production")
 SIGNAL_TOKEN_TTL = int(os.environ.get("P2P_SIGNAL_TOKEN_TTL", 3600))
-# Where the desktop apps find the signaling server (they ask GET /api/config/).
+# Where the desktop apps find the signaling server (they ask GET /api/config/). Default: the signaling server
+# on port 8765 of the domain (wss through the web proxy when HTTPS is on). run_dev.py / tests set their own.
+SIGNAL_PORT = int(os.environ.get("P2P_SIGNAL_PORT", 8765))
 P2P_SIGNALING_URL = os.environ.get("P2P_SIGNALING_URL",
-                                   "ws://127.0.0.1:8765/ws" if DEBUG else f"{_WS}://{DOMAIN}/ws")
+                                   f"wss://{DOMAIN}/ws" if HTTPS else f"ws://{DOMAIN}:{SIGNAL_PORT}/ws")
 BILLING_PROVIDER = os.environ.get("BILLING_PROVIDER", "dummy")
 CLOUD_PUBLIC_URL = os.environ.get("CLOUD_PUBLIC_URL", "http://127.0.0.1:8000/" if DEBUG else f"{_SCHEME}://{DOMAIN}/")
 

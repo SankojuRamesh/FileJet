@@ -1,0 +1,20 @@
+{% extends "cloud/base.html" %}
+{% block title %}Support tickets{% endblock %}
+{% block titlebar %}Staff console › Tickets{% endblock %}
+{% block content %}
+<h1>Support tickets</h1>
+{% include "support/_staff_tabs.html" %}
+<form class="toolbar" method="get">
+  <a class="btn small {% if view == 'active' %}{% else %}secondary{% endif %}" href="?view=active">Active</a>
+  <a class="btn small {% if view == 'open' %}{% else %}secondary{% endif %}" href="?view=open">Need reply</a>
+  <a class="btn small {% if view == 'mine' %}{% else %}secondary{% endif %}" href="?view=mine">Assigned to me</a>
+  <a class="btn small {% if view == 'unassigned' %}{% else %}secondary{% endif %}" href="?view=unassigned">Unassigned</a>
+  <a class="btn small {% if view == 'waiting' %}{% else %}secondary{% endif %}" href="?view=waiting">Waiting for user</a>
+  <a class="btn small {% if view == 'closed' %}{% else %}secondary{% endif %}" href="?view=closed">Closed</a>
+  <a class="btn small {% if view == 'all' %}{% else %}secondary{% endif %}" href="?view=all">All</a>
+  <span class="grow"></span>
+  <input type="hidden" name="view" value="{{ view }}">
+  <input name="q" value="{{ q }}" placeholder="Search subject, user, FJ-number" style="width:260px" aria-label="Search">
+</form>
+{% include "support/_ticket_table.html" %}
+{% endblock %}

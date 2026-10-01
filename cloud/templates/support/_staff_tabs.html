@@ -1,0 +1,8 @@
+<div class="tabs-bar">
+  <a href="{% url 'staff' %}" class="{% if tab == 'overview' %}on{% endif %}">Overview</a>
+  <a href="{% url 'staff_users' %}" class="{% if tab == 'users' %}on{% endif %}">Users &amp; subscriptions</a>
+  <a href="{% url 'staff_tickets' %}" class="{% if tab == 'tickets' %}on{% endif %}">Support tickets</a>
+  {% if user.is_superuser %}<a href="{% url 'staff_employees' %}" class="{% if tab == 'employees' %}on{% endif %}">Employees</a>{% endif %}
+  <span class="grow"></span>
+  <span class="muted">{% if user.is_superuser %}Platform admin{% else %}Support employee{% endif %}</span>
+</div>

@@ -245,7 +245,7 @@ Server size: 1 CPU / 1 GB RAM is enough for hundreds of users – files do **not
 |---|---|
 | Domain | **iotgateway.live** → `13.204.80.52` |
 | Cloud URL for the app | **http://iotgateway.live/** (the app's default) |
-| Signaling URL (automatic) | `ws://iotgateway.live/ws` |
+| Signaling server | **ws://iotgateway.live:8765/ws** – health check: http://iotgateway.live:8765/healthz |
 | Web dashboard | http://iotgateway.live/ |
 
 **1. AWS security group** (EC2 → instance → *Security* → security group → *Edit inbound rules*) – allow:
@@ -253,9 +253,10 @@ Server size: 1 CPU / 1 GB RAM is enough for hundreds of users – files do **not
 | Type | Port | Source |
 |---|---|---|
 | HTTP | 80 | 0.0.0.0/0 |
+| Custom TCP | 8765 | 0.0.0.0/0 (signaling server) |
 | Custom TCP | 8766 | 0.0.0.0/0 (reflector for NAT hole punching) |
 
-Ports 8000 and 8765 stay **closed** – nginx reaches them locally.
+Port 8000 (Django) stays **closed** – nginx reaches it locally.
 
 **2. Stop the old manual Django process** (currently running in debug mode):
 ```bash
@@ -275,8 +276,8 @@ because nginx is installed, configures the nginx site **`mediarush`** (`deploy/n
 
 **4. Check**
 ```bash
-curl http://iotgateway.live/healthz            # {"ok":true,...}            <- signaling via nginx
-curl http://iotgateway.live/api/config/        # "signaling_url":"ws://iotgateway.live/ws"
+curl http://iotgateway.live:8765/healthz       # {"ok":true,...}            <- signaling server
+curl http://iotgateway.live/api/config/        # "signaling_url":"ws://iotgateway.live:8765/ws"
 systemctl status mediarush nginx
 ```
 
@@ -390,7 +391,7 @@ then restart the server (Windows: stop + start the task; Linux: `sudo systemctl 
 | `DJANGO_ALLOWED_HOSTS` | Names/IPs users use to reach the server (comma separated). |
 | `DJANGO_HTTPS` | `0` = plain HTTP (default), `1` only if the site has an HTTPS certificate. |
 | `CLOUD_PUBLIC_URL` | The Cloud URL (used for links in e-mails). |
-| `P2P_SIGNALING_URL` | `ws://IP:8765/ws` (office) or `ws://iotgateway.live/ws` (domain). The app gets it from the cloud. |
+| `P2P_SIGNALING_URL` | `ws://IP:8765/ws` (office) or `ws://iotgateway.live:8765/ws` (domain, the default). The app gets it from the cloud. |
 | `DJANGO_SQLITE_PATH` / `DATABASE_URL` | SQLite file (default) or PostgreSQL `postgres://user:pass@host:5432/db`. |
 | `CLOUD_PORT`, `SIGNAL_PORT`, `REFLECTOR_PORT` | 8000 / 8765 / 8766. |
 | `EMAIL_*`, `DEFAULT_FROM_EMAIL`, `SHOW_EMAIL_OUTBOX` | E-mail, see 8.4. |

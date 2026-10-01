@@ -29,7 +29,8 @@ APPS = {
                                                 ("myfolders", "remote", "Shared with me"),
                                                 ("users", "contacts", "Users"),
                                                 ("chat", "chat", "Chat"),
-                                                ("transfers", "transfers", "Transfers")]},
+                                                ("transfers", "transfers", "Transfers"),
+                                                ("support", "support", "Support")]},
 }
 
 
@@ -156,7 +157,9 @@ class MainWindow(QMainWindow):
         from .admin_view import AdminFoldersView, UsersView
         from .client_view import ClientFoldersView
         from .chat_view import ChatView
-        makers.update(folders=AdminFoldersView, users=UsersView, myfolders=ClientFoldersView, chat=ChatView)
+        from .support_view import SupportView
+        makers.update(folders=AdminFoldersView, users=UsersView, myfolders=ClientFoldersView, chat=ChatView,
+                      support=SupportView)
         for key in self.buttons:
             page = makers[key](self.core, self)
             self.pages[key] = page

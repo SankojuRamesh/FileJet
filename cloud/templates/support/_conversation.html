@@ -1,0 +1,9 @@
+<div class="convo">
+  {% for m in msgs %}
+  <div class="bubble {% if m.from_staff %}staff{% else %}user{% endif %}{% if staff_view %} sv{% endif %}">
+    <div class="who">{% if m.from_staff %}{% if staff_view %}{{ m.author.label|default:"Support" }} · support{% else %}FileJet Support{% endif %}{% else %}{{ m.author.label|default:"User" }}{% endif %}
+      <span class="when">{{ m.created_at|date:"Y-m-d H:i" }}</span></div>
+    <div class="body">{{ m.body|linebreaksbr }}</div>
+  </div>
+  {% endfor %}
+</div>

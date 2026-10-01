@@ -1,0 +1,13 @@
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>#</th><th>Subject</th><th>User</th><th>Topic</th><th>Status</th><th>Priority</th><th>Assigned</th><th>Last update</th></tr></thead>
+  <tbody>{% for t in tickets %}
+    <tr><td class="mono"><a href="{% url 'staff_ticket' t.pk %}">{{ t.number }}</a></td>
+      <td class="name"><a href="{% url 'staff_ticket' t.pk %}">{{ t.subject }}</a>{% if t.staff_unread %} <span class="badge-new">{{ t.staff_unread }} new</span>{% endif %}</td>
+      <td><a href="{% url 'staff_user' t.user.pk %}">{{ t.user.label }}</a></td>
+      <td>{{ t.get_category_display }}</td>
+      <td><span class="pill t-{{ t.status }}">{{ t.get_status_display }}</span></td>
+      <td>{% if t.priority == "high" %}<span class="pill failed">High</span>{% else %}<span class="muted">Normal</span>{% endif %}</td>
+      <td>{{ t.assigned_to.label|default:"—" }}</td>
+      <td>{{ t.last_message_at|date:"Y-m-d H:i" }}</td></tr>
+  {% empty %}<tr><td colspan="8" class="empty">No tickets.</td></tr>{% endfor %}
+  </tbody></table></div>

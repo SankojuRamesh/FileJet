@@ -1,0 +1,42 @@
+{% extends "cloud/base.html" %}
+{% block title %}{{ u.label }}{% endblock %}
+{% block titlebar %}Staff console › <a href="{% url 'staff_users' %}">Users</a> › {{ u.label }}{% endblock %}
+{% block content %}
+<h1>{{ u.label }} <span class="muted" style="font-size:14px">@{{ u.username }} · ID {{ u.formatted_id }}</span></h1>
+{% include "support/_staff_tabs.html" %}
+<div class="row">
+  <div class="card">
+    <h2 style="margin-top:0">Account</h2>
+    <table class="grid kv"><tbody>
+      <tr><td class="muted">E-mail</td><td>{{ u.email }}</td></tr>
+      <tr><td class="muted">Organization</td><td>{{ u.organization|default:"—" }}</td></tr>
+      <tr><td class="muted">Joined</td><td>{{ u.date_joined|date:"Y-m-d H:i" }}</td></tr>
+      <tr><td class="muted">Last sign-in</td><td>{{ u.last_login|date:"Y-m-d H:i"|default:"—" }}</td></tr>
+      <tr><td class="muted">Account</td><td>{% if u.is_active %}<span class="pill completed">active</span>{% else %}<span class="pill failed">disabled</span>{% endif %}</td></tr>
+      <tr><td class="muted">Devices</td><td>{% for d in devices %}{{ d.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Subscription</h2>
+    <table class="grid kv"><tbody>
+      <tr><td class="muted">Plan</td><td><b>{{ sub.plan.name }}</b>{% if sub.plan.price_month %} · ${{ sub.plan.price_month }}/month{% endif %}</td></tr>
+      <tr><td class="muted">Status</td><td>{{ sub.get_status_display }}{% if sub.cancel_at_period_end %} · <span class="pill paused">ends at expiry</span>{% endif %}</td></tr>
+      <tr><td class="muted">Period</td><td>{{ sub.current_period_start|date:"Y-m-d" }} → <b>{{ end|date:"Y-m-d" }}</b> ({{ days }} day{{ days|pluralize }} left)</td></tr>
+      <tr><td class="muted">Provider</td><td>{{ sub.provider }}</td></tr>
+    </tbody></table>
+    {% if is_admin %}
+    <form method="post" style="margin-top:14px">{% csrf_token %}
+      <div class="toolbar" style="flex-wrap:wrap">
+        <label style="margin:0">Plan <select name="plan">{% for p in plans %}<option value="{{ p.code }}"{% if p.pk == sub.plan_id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label>
+        <label style="margin:0">Expires <input type="date" name="expires" value="{{ end|date:'Y-m-d' }}"></label>
+        <label style="margin:0">Status <select name="status">{% for v, l in statuses %}<option value="{{ v }}"{% if v == sub.status %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+        <label style="margin:0"><input type="checkbox" name="end_at_expiry" value="1"{% if sub.cancel_at_period_end %} checked{% endif %}> End at expiry (back to Free)</label>
+        <button class="btn">Save</button>
+      </div>
+    </form>
+    {% else %}<p class="muted" style="margin-top:12px">Only the platform admin can change subscriptions.</p>{% endif %}
+  </div>
+</div>
+<h2>Support requests</h2>
+{% include "support/_ticket_table.html" with tickets=tickets %}
+{% endblock %}

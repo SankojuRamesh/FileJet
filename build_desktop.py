@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CLOUD_URL = "http://iotgateway.live/"
 # Signaling server the app connects to. Empty = use what the cloud announces (GET /api/config/).
-DEFAULT_SIGNAL_URL = "ws://13.204.80.52:8765/ws"
+DEFAULT_SIGNAL_URL = "ws://iotgateway.live:8765/ws"
 _QT_APP = None
 EXCLUDE = ["server", "cloud", "django", "rest_framework", "fastapi", "starlette", "uvicorn", "pydantic",
            "httpx", "pytest", "tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore",
@@ -88,9 +88,9 @@ def version_file(name: str) -> Path | None:
     return out
 
 
-def build(name: str = "FileJet", entry: str = "filejet.py") -> None:
+def build(name: str = "FileJet", entry: str = "filejet.py", dist: str = "dist") -> None:
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed", "--name", name,
-           "--collect-submodules", "client"]
+           "--collect-submodules", "client", "--distpath", dist]
     icon = make_icon()
     if icon:
         cmd += ["--icon", str(icon)]
@@ -109,7 +109,8 @@ if __name__ == "__main__":
     ap.add_argument("--cloud-url", default=DEFAULT_CLOUD_URL, help=f"cloud the app uses by default ({DEFAULT_CLOUD_URL})")
     ap.add_argument("--signal-url", default=DEFAULT_SIGNAL_URL,
                     help=f'signaling server, "" = from the cloud (default {DEFAULT_SIGNAL_URL})')
+    ap.add_argument("--dist", default="dist", help="output folder (default dist/)")
     args = ap.parse_args()
     write_build_info(args.cloud_url, args.signal_url)
-    build()
-    print("\nDone: see dist/")
+    build(dist=args.dist)
+    print(f"\nDone: see {args.dist}/")

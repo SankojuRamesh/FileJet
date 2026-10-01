@@ -281,6 +281,23 @@ class CloudClient:
     def add_group_to_folder(self, folder_id: str, group_id: int, data: dict) -> dict:
         return self.request("POST", f"api/folders/{folder_id}/groups/", dict(data, group_id=group_id))
 
+    # ---- support desk
+    def support_tickets(self) -> dict:
+        return self.request("GET", "api/support/tickets/")
+
+    def support_open(self, subject: str, message: str, category: str = "general") -> dict:
+        return self.request("POST", "api/support/tickets/", {"subject": subject, "message": message,
+                                                             "category": category})
+
+    def support_ticket(self, ticket_id: int) -> dict:
+        return self.request("GET", f"api/support/tickets/{int(ticket_id)}/")
+
+    def support_reply(self, ticket_id: int, body: str) -> dict:
+        return self.request("POST", f"api/support/tickets/{int(ticket_id)}/messages/", {"body": body})
+
+    def support_close(self, ticket_id: int) -> dict:
+        return self.request("POST", f"api/support/tickets/{int(ticket_id)}/close/")
+
     def log_activity(self, folder_id: str, action: str, path: str = "", detail: str = "", actor: str = "") -> None:
         self.request("POST", f"api/folders/{folder_id}/activity/",
                      {"action": action, "path": path, "detail": detail, "actor": actor})
