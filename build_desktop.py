@@ -58,12 +58,45 @@ def make_icon() -> Path | None:
     return None
 
 
+def version_file(name: str) -> Path | None:
+    """Windows file details (Properties -> Details, Task Manager): product name, description, version."""
+    if sys.platform != "win32":
+        return None
+    import re
+    ver = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+    parts = [int(x) for x in (ver.group(1) if ver else "2.0.0").split(".")][:3] + [0]
+    while len(parts) < 4:
+        parts.insert(-1, 0)
+    v = ".".join(map(str, parts))
+    out = ROOT / "build" / "version_info.txt"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={tuple(parts)}, prodvers={tuple(parts)}, mask=0x3f, flags=0x0, OS=0x40004,
+                    fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[StringFileInfo([StringTable('040904B0', [
+      StringStruct('CompanyName', '{name}'),
+      StringStruct('FileDescription', '{name}'),
+      StringStruct('FileVersion', '{v}'),
+      StringStruct('InternalName', '{name}'),
+      StringStruct('OriginalFilename', '{name}.exe'),
+      StringStruct('ProductName', '{name}'),
+      StringStruct('ProductVersion', '{v}'),
+      StringStruct('LegalCopyright', '{name}')])]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])]
+)
+""", encoding="utf-8")
+    return out
+
+
 def build(name: str = "FileJet", entry: str = "filejet.py") -> None:
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed", "--name", name,
            "--collect-submodules", "client"]
     icon = make_icon()
     if icon:
         cmd += ["--icon", str(icon)]
+    info = version_file(name)
+    if info:
+        cmd += ["--version-file", str(info)]
     for mod in EXCLUDE:
         cmd += ["--exclude-module", mod]
     cmd.append(entry)
