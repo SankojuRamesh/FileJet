@@ -11,7 +11,7 @@ This guide takes you from a fresh checkout to a running system, step by step:
 | [5. Two PCs on the same network](#5-test-with-two-pcs-on-the-same-network) | Testing between real computers in the office |
 | [6. First use in the app](#6-first-use-in-the-app) | Accounts, users, sharing a folder, sending |
 | [7. Build the installable app](#7-build-the-installable-app-mediarushexe) | Making `MediaRush.exe` for users |
-| [8. Deploy the server without Docker](#8-deploy-the-server-without-docker-windows-or-linux) | Production on a Windows or Linux server (recommended) |
+| [8. Deploy the server without Docker](#8-deploy-the-server-without-docker-windows-or-linux) | Production on a Windows or Linux server (recommended); **8.0 = iotgateway.live** |
 | [9. Deploy the server with Docker](#9-deploy-the-server-with-docker-optional) | Alternative, if you use Docker |
 | [10. Roll out to users](#10-roll-out-to-users) | Giving MediaRush to your team |
 | [11. Operate: update, back up, logs](#11-operate-update-back-up-logs) | Day-2 tasks |
@@ -202,7 +202,7 @@ The servers are **not** inside the exe.
 Optional: preset the cloud URL for your users so they never type it. Users can still change it with
 **Change** on the sign-in screen; you can also set it per PC with an environment variable:
 ```powershell
-setx P2P_CLOUD_URL "https://transfer.example.com/"
+setx P2P_CLOUD_URL "https://iotgateway.live/"
 ```
 
 ---
@@ -216,7 +216,7 @@ Choose the kind of deployment:
 
 | | **A. Office network** (LAN) | **B. Internet** (different sites, home workers) |
 |---|---|---|
-| Users reach the server by | its IP, e.g. `http://192.168.1.20:8000/` | a domain, e.g. `https://transfer.example.com/` |
+| Users reach the server by | its IP, e.g. `http://192.168.1.20:8000/` | a domain, e.g. `https://iotgateway.live/` |
 | Needs a domain + certificate | no | yes (HTTPS is automatic via Caddy) |
 | Ports to open on the server | TCP 8000, 8765, 8766 | TCP 80, 443, 8766 |
 | Installer option | `-Address` / `--address` (or nothing = auto-detect) | `-Domain` / `--domain` |
@@ -236,7 +236,7 @@ Server size: 1 CPU / 1 GB RAM is enough for hundreds of users – files do **not
 
    # B. internet with your domain (point the domain's DNS A record to this server first)
    winget install CaddyServer.Caddy          # HTTPS helper, once
-   powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain transfer.example.com
+   powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
    ```
 4. The installer:
    - copies the server to **`C:\MediaRush`** and installs its Python packages,
@@ -264,6 +264,50 @@ Manage it (Administrator PowerShell):
 
 > The computer running the server must stay **on** and must not sleep (*Power options → Sleep: Never*).
 
+### 8.0 Your server: iotgateway.live (AWS, Ubuntu, nginx)
+
+| | |
+|---|---|
+| Domain | **iotgateway.live** → `13.204.80.52` |
+| Cloud URL for the app | **https://iotgateway.live/** (the app's default) |
+| Signaling URL (automatic) | `wss://iotgateway.live/ws` |
+| Web dashboard | https://iotgateway.live/ |
+
+**1. AWS security group** (EC2 → instance → *Security* → security group → *Edit inbound rules*) – allow:
+
+| Type | Port | Source |
+|---|---|---|
+| HTTP | 80 | 0.0.0.0/0 |
+| HTTPS | 443 | 0.0.0.0/0 |
+| Custom TCP | 8766 | 0.0.0.0/0 (reflector for NAT hole punching) |
+
+Ports 8000 and 8765 stay **closed** – nginx reaches them locally.
+
+**2. Stop the old manual Django process** (if one is running on port 8000 or 8765):
+```bash
+sudo ss -ltnp | grep -E ':8000|:8765'      # shows what is running there
+# stop it (e.g. sudo systemctl stop <old-service>; sudo systemctl disable <old-service>)
+```
+
+**3. Install / update MediaRush** (copy the project to the server first, e.g. `scp -r ftp_app ubuntu@13.204.80.52:~/`):
+```bash
+cd ~/ftp_app
+CERT_EMAIL=you@example.com sudo -E bash deploy/linux/install.sh --domain iotgateway.live
+```
+Because nginx is installed, the installer configures **nginx** (site `mediarush`, from `deploy/nginx/mediarush.conf`)
+– other enabled nginx sites for iotgateway.live are disabled with a backup – and gets the **HTTPS certificate with
+certbot** (auto-renewing). If the certificate cannot be obtained yet, it runs on plain HTTP and tells you; fix DNS /
+ports and run it again.
+
+**4. Check**
+```bash
+curl https://iotgateway.live/healthz            # {"ok":true,...}           <- signaling via nginx
+curl https://iotgateway.live/api/config/        # "signaling_url":"wss://iotgateway.live/ws"
+systemctl status mediarush nginx
+```
+
+**5. Apps:** MediaRush uses `https://iotgateway.live/` by default – just create an account and sign in.
+
 ### 8.2 Linux server (Ubuntu / Debian)
 
 1. Copy the project folder to the server: `scp -r ftp_app user@SERVER:~/`, then `ssh user@SERVER`.
@@ -275,7 +319,7 @@ Manage it (Administrator PowerShell):
    sudo bash deploy/linux/install.sh
 
    # B. internet with your domain (DNS A record -> this server first); installs Caddy for HTTPS
-   sudo bash deploy/linux/install.sh --domain transfer.example.com
+   sudo bash deploy/linux/install.sh --domain iotgateway.live
    ```
 3. The installer copies the server to **`/opt/mediarush`**, writes **`/opt/mediarush/server.env`** with random secrets,
    creates the database in `/opt/mediarush/data`, installs the systemd service **`mediarush`** (starts at boot,
@@ -297,7 +341,7 @@ Manage it:
 ### 8.3 Verify (both)
 
 Open in a browser (use your Cloud URL):
-- `http://192.168.1.20:8000/` or `https://transfer.example.com/` → MediaRush sign-in page
+- `http://192.168.1.20:8000/` or `https://iotgateway.live/` → MediaRush sign-in page
 - add `api/config/` to the URL → shows the `signaling_url`
 
 Then in the MediaRush app: sign-in screen → **Change** → enter the Cloud URL → create an account.
@@ -338,13 +382,13 @@ Check the settings without starting the server: `python serve.py --env server.en
 
 ## 9. Deploy the server with Docker (optional)
 
-Result: `https://transfer.example.com/` serves the web dashboard + API, `wss://transfer.example.com/ws`
+Result: `https://iotgateway.live/` serves the web dashboard + API, `wss://iotgateway.live/ws`
 the signaling server, with automatic HTTPS (Caddy + Let’s Encrypt) and PostgreSQL.
 
 ### 9.1 What you need
 - A Linux server (VPS) with a **public IP** – 1 vCPU / 1 GB RAM is enough for hundreds of users
   (files do not pass through it).
-- A **domain name**, e.g. `transfer.example.com`, with an **A record** pointing to the server IP.
+- A **domain name**, e.g. `iotgateway.live`, with an **A record** pointing to the server IP.
 - **Docker** + **Docker Compose plugin** on the server:
   ```bash
   curl -fsSL https://get.docker.com | sh
@@ -371,12 +415,12 @@ nano .env
 Fill in `.env`:
 | Variable | Value |
 |---|---|
-| `P2P_DOMAIN` | `transfer.example.com` |
+| `P2P_DOMAIN` | `iotgateway.live` |
 | `DJANGO_SECRET_KEY` | random secret #1 |
 | `P2P_CLOUD_JWT_SECRET` | random secret #2 (shared by cloud + signaling automatically) |
 | `POSTGRES_PASSWORD` | random secret #3 |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` | your SMTP account |
-| `DEFAULT_FROM_EMAIL` | e.g. `MediaRush <no-reply@transfer.example.com>` |
+| `DEFAULT_FROM_EMAIL` | e.g. `MediaRush <no-reply@iotgateway.live>` |
 | `BILLING_PROVIDER` | `dummy` (no payment gateway is included) |
 
 ### 9.4 Start
@@ -388,14 +432,14 @@ docker compose exec cloud python manage.py createsuperuser
 
 ### 9.5 Verify
 ```bash
-curl https://transfer.example.com/healthz           # {"ok":true,...}  (signaling via Caddy)
-curl https://transfer.example.com/api/config/       # {"signaling_url":"wss://transfer.example.com/ws",...}
+curl https://iotgateway.live/healthz           # {"ok":true,...}  (signaling via Caddy)
+curl https://iotgateway.live/api/config/       # {"signaling_url":"wss://iotgateway.live/ws",...}
 ```
-Open `https://transfer.example.com/` in a browser → MediaRush sign-in page.
-Admin area: `https://transfer.example.com/admin/`.
+Open `https://iotgateway.live/` in a browser → MediaRush sign-in page.
+Admin area: `https://iotgateway.live/admin/`.
 
 ### 9.6 Connect the apps
-In MediaRush: sign-in screen → **Change** → `https://transfer.example.com/` → create account / sign in.
+In MediaRush: sign-in screen → **Change** → `https://iotgateway.live/` → create account / sign in.
 The status bar should show **● Online**.
 
 ---
@@ -403,7 +447,7 @@ The status bar should show **● Online**.
 ## 10. Roll out to users
 
 1. Build `MediaRush.exe` ([section 7](#7-build-the-installable-app-mediarushexe)) and share it (file share, intranet, e-mail link).
-2. Tell users the **cloud URL** (`https://transfer.example.com/`) – they enter it once via **Change** on the
+2. Tell users the **cloud URL** (`https://iotgateway.live/`) – they enter it once via **Change** on the
    sign-in screen (or set `P2P_CLOUD_URL` for them).
 3. Each user creates an account and sends their **ID** to whoever shares folders with them.
 4. First transfer: allow MediaRush in the Windows firewall prompt.

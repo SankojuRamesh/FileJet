@@ -237,12 +237,12 @@ Full step-by-step guide: **[docs/RUN_AND_DEPLOY.md](docs/RUN_AND_DEPLOY.md)**.
 ```powershell
 # Windows server, in an Administrator PowerShell
 powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1                         # office network
-powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain transfer.example.com
+powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
 ```
 ```bash
 # Linux server (Ubuntu/Debian)
 sudo bash deploy/linux/install.sh                                   # office network
-sudo bash deploy/linux/install.sh --domain transfer.example.com     # internet, HTTPS via Caddy
+sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, HTTPS via Caddy
 ```
 
 **With Docker (optional).**
@@ -250,7 +250,7 @@ sudo bash deploy/linux/install.sh --domain transfer.example.com     # internet, 
 cp .env.example .env && docker compose up -d --build
 ```
 
-* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `https://transfer.example.com/`)
+* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `https://iotgateway.live/`)
   via **Change** on the sign-in screen.
 * Ports to open: office network TCP 8000, 8765 and 8766; internet TCP 80, 443 and 8766.
 

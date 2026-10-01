@@ -3,12 +3,14 @@
 #
 #   sudo bash deploy/linux/install.sh                                  # office network, plain HTTP (auto IP)
 #   sudo bash deploy/linux/install.sh --address 192.168.1.20
-#   sudo bash deploy/linux/install.sh --domain transfer.example.com   # internet, HTTPS via Caddy
+#   sudo bash deploy/linux/install.sh --domain iotgateway.live        # internet, HTTPS (nginx+certbot if nginx is
+#                                                                     #   installed, otherwise Caddy)
+#   CERT_EMAIL=you@example.com sudo -E bash deploy/linux/install.sh --domain iotgateway.live   # with renewal e-mails
 #
 # What it does: copies the server to /opt/mediarush, creates a venv, writes server.env with random secrets
 # (kept on re-run), prepares the database (SQLite in /opt/mediarush/data), installs the systemd service
 # "mediarush" (starts at boot, restarts on failure), opens the firewall (ufw if present) and, with --domain,
-# installs Caddy for automatic HTTPS. Re-running it updates the files and keeps settings + database.
+# sets up HTTPS (nginx + certbot when nginx is installed, else Caddy). Re-running it updates the files and keeps settings + database.
 set -euo pipefail
 
 INSTALL_DIR=/opt/mediarush
@@ -132,7 +134,51 @@ if command -v ufw >/dev/null && ufw status | grep -q active; then
   if [ -n "$DOMAIN" ]; then ufw allow 80,443,"$REFLECTOR_PORT"/tcp; else ufw allow "$CLOUD_PORT","$SIGNAL_PORT","$REFLECTOR_PORT"/tcp; fi
 fi
 
-if [ -n "$DOMAIN" ]; then
+set_env() {   # set_env KEY VALUE  -> update server.env
+  if grep -q "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
+}
+
+if [ -n "$DOMAIN" ] && command -v nginx >/dev/null; then
+  step "nginx found - configuring nginx for $DOMAIN"
+  # other enabled sites for the same domain would shadow this one: disable them (backup kept)
+  for f in /etc/nginx/sites-enabled/*; do
+    [ -e "$f" ] || continue
+    [ "$(basename "$f")" = "mediarush" ] && continue
+    if grep -qE "server_name[^;]*\b$DOMAIN\b" "$f"; then
+      echo "  disabling $f (it also serves $DOMAIN); backup: $f.disabled-by-mediarush"
+      mv "$f" "$f.disabled-by-mediarush"
+    fi
+  done
+  sed -e "s/iotgateway\.live/$DOMAIN/g" -e "s/127\.0\.0\.1:8000/127.0.0.1:$CLOUD_PORT/" \
+      -e "s/127\.0\.0\.1:8765/127.0.0.1:$SIGNAL_PORT/g" "$INSTALL_DIR/deploy/nginx/mediarush.conf" \
+      > /etc/nginx/sites-available/mediarush
+  ln -sf /etc/nginx/sites-available/mediarush /etc/nginx/sites-enabled/mediarush
+  nginx -t && systemctl reload nginx
+  if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 'Nginx Full' >/dev/null || true; fi
+
+  step "HTTPS certificate (Let's Encrypt)"
+  if command -v apt-get >/dev/null && ! command -v certbot >/dev/null; then
+    apt-get install -y -qq certbot python3-certbot-nginx >/dev/null
+  fi
+  CERT_ARGS=(-d "$DOMAIN")
+  if getent hosts "www.$DOMAIN" >/dev/null; then CERT_ARGS+=(-d "www.$DOMAIN"); fi
+  if [ -n "${CERT_EMAIL:-}" ]; then CERT_ARGS+=(-m "$CERT_EMAIL"); else CERT_ARGS+=(--register-unsafely-without-email); fi
+  if certbot --nginx "${CERT_ARGS[@]}" --non-interactive --agree-tos --redirect; then
+    set_env DJANGO_HTTPS 1
+    set_env CLOUD_PUBLIC_URL "https://$DOMAIN/"
+    set_env P2P_SIGNALING_URL "wss://$DOMAIN/ws"
+    CLOUD_URL="https://$DOMAIN/"
+  else
+    echo "!! Could not get a certificate (DNS must point to this server and ports 80/443 must be open)." >&2
+    echo "!! Running on plain HTTP for now - re-run this script once that is fixed." >&2
+    set_env DJANGO_HTTPS 0
+    set_env CLOUD_PUBLIC_URL "http://$DOMAIN/"
+    set_env P2P_SIGNALING_URL "ws://$DOMAIN/ws"
+    CLOUD_URL="http://$DOMAIN/"
+  fi
+  systemctl restart mediarush
+
+elif [ -n "$DOMAIN" ]; then
   step "HTTPS with Caddy for $DOMAIN"
   if ! command -v caddy >/dev/null && command -v apt-get >/dev/null; then
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gnupg >/dev/null

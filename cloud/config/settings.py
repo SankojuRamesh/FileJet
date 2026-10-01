@@ -24,8 +24,18 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change
 if not DEBUG and SECRET_KEY.startswith("dev-insecure"):
     raise ImproperlyConfigured("Set DJANGO_SECRET_KEY in production")
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "13.204.80.52, localhost,127.0.0.1,testserver, *")
-CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
+# Public domain of this deployment. Production defaults below are derived from it; every value can still be
+# overridden by its own environment variable. Development (DJANGO_DEBUG=1) keeps using 127.0.0.1.
+DOMAIN = os.environ.get("P2P_DOMAIN", "iotgateway.live")
+# Served over HTTPS? Set DJANGO_HTTPS=0 only while the site has no certificate yet (or for a plain-HTTP office
+# network): web sign-in cookies must then be allowed over HTTP.
+HTTPS = os.environ.get("DJANGO_HTTPS", "0" if DEBUG else "1") == "1"
+_SCHEME, _WS = ("https", "wss") if HTTPS else ("http", "ws")
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS",
+                         f"{DOMAIN},www.{DOMAIN},13.204.80.52,localhost,127.0.0.1,testserver,*")
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS",
+                                "" if DEBUG else f"https://{DOMAIN},https://www.{DOMAIN},http://{DOMAIN}")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -147,9 +157,11 @@ SIGNAL_JWT_SECRET = os.environ.get("P2P_CLOUD_JWT_SECRET", "dev-signal-secret-ch
 if not DEBUG and SIGNAL_JWT_SECRET.startswith("dev-"):
     raise ImproperlyConfigured("Set P2P_CLOUD_JWT_SECRET in production")
 SIGNAL_TOKEN_TTL = int(os.environ.get("P2P_SIGNAL_TOKEN_TTL", 3600))
-P2P_SIGNALING_URL = os.environ.get("P2P_SIGNALING_URL", "ws://127.0.0.1:8765/ws")
+# Where the desktop apps find the signaling server (they ask GET /api/config/).
+P2P_SIGNALING_URL = os.environ.get("P2P_SIGNALING_URL",
+                                   "ws://127.0.0.1:8765/ws" if DEBUG else f"{_WS}://{DOMAIN}/ws")
 BILLING_PROVIDER = os.environ.get("BILLING_PROVIDER", "dummy")
-CLOUD_PUBLIC_URL = os.environ.get("CLOUD_PUBLIC_URL", "http://127.0.0.1:8000/")
+CLOUD_PUBLIC_URL = os.environ.get("CLOUD_PUBLIC_URL", "http://127.0.0.1:8000/" if DEBUG else f"{_SCHEME}://{DOMAIN}/")
 
 # E-mail (folder invitations). Development: printed to the console AND visible under "Inbox" in the
 # web app. Production: set EMAIL_HOST etc. (SMTP) and SHOW_EMAIL_OUTBOX=0.
@@ -160,12 +172,8 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "MediaRush <no-reply@mediarush.local>")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", f"MediaRush <no-reply@{DOMAIN}>")
 SHOW_EMAIL_OUTBOX = os.environ.get("SHOW_EMAIL_OUTBOX", "1" if DEBUG else "0") == "1"
-
-# Served over HTTPS (domain + Caddy)? Set DJANGO_HTTPS=0 only for a plain-HTTP deployment inside an office
-# network (no domain / certificate): web sign-in cookies must then be allowed over HTTP.
-HTTPS = os.environ.get("DJANGO_HTTPS", "0" if DEBUG else "1") == "1"
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

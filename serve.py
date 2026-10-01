@@ -43,8 +43,6 @@ def check_settings() -> None:
         v = os.environ.get(key, "")
         if len(v) < 32 or v.startswith("change-me"):
             problems.append(f"{key} must be a random value of 32+ characters")
-    if not os.environ.get("P2P_SIGNALING_URL"):
-        problems.append("P2P_SIGNALING_URL is not set (e.g. ws://192.168.1.20:8765/ws or wss://your.domain/ws)")
     if problems:
         sys.exit("Settings problem:\n  - " + "\n  - ".join(problems))
 

@@ -174,8 +174,11 @@ def default_data_dir(app: str) -> Path:
     return old if old.exists() else Path.home() / ".mediarush" / app
 
 
+DEFAULT_CLOUD_URL = "https://iotgateway.live/"      # MediaRush cloud (change with "Change" on the sign-in screen)
+
+
 def load_settings(data_dir: Path) -> dict:
-    s = {"cloud_url": os.environ.get("P2P_CLOUD_URL", "http://127.0.0.1:8000/"), "server_override": "",
+    s = {"cloud_url": os.environ.get("P2P_CLOUD_URL", DEFAULT_CLOUD_URL), "server_override": "",
          "download_dir": str(Path.home() / "Downloads" / "MediaRush"), "streams": 4, "max_streams": 8,
          "chunk_size": "Auto", "rate_limit": "", "use_upnp": True, "use_stun": True, "allow_punch": True,
          "verify_full": False}
