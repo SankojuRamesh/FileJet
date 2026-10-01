@@ -315,7 +315,7 @@ def run(app_kind: str = "app", profile: str | None = None) -> int:
     app.setStyle("Fusion")
     app.setStyleSheet(stylesheet())
     app.setFont(QFont("Segoe UI", 9))
-    app.setWindowIcon(icons.icon("transfers", C["accent"], size=64))
+    app.setWindowIcon(icons.brand_mark(64))
     bridge = init_bridge()
     data_dir = default_data_dir(profile or "default")
     while True:

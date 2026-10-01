@@ -173,15 +173,13 @@ def kind_label(name: str, is_dir: bool) -> str:
     return f"{ext.upper()} file" if ext else "File"
 
 
+FILEJET_LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6f9bff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="1" y="1" width="30" height="30" rx="9" fill="url(#g)"/><path d="M10.0 22.6v4M7.6 21.4v2.4M12.4 21.4v2.4" stroke="#fff" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/><path d="M22.0 9.4v-4M19.6 10.6v-2.4M24.4 10.6v-2.4" stroke="#fff" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/><path d="M10.00,6.79 L10.97,9.13 L10.97,12.80 L14.84,16.70 L14.84,17.79 L10.97,16.07 L10.97,18.57 L12.65,19.97 L12.65,20.91 L10.00,20.28 L7.35,20.91 L7.35,19.97 L9.03,18.57 L9.03,16.07 L5.16,17.79 L5.16,16.70 L9.03,12.80 L9.03,9.13 Z" fill="#fff"/><g transform="rotate(180 22.0 17.8)"><path d="M22.00,10.39 L22.98,12.73 L22.98,16.40 L26.84,20.30 L26.84,21.39 L22.98,19.67 L22.98,22.17 L24.65,23.57 L24.65,24.51 L22.00,23.88 L19.35,24.51 L19.35,23.57 L21.02,22.17 L21.02,19.67 L17.16,21.39 L17.16,20.30 L21.02,16.40 L21.02,12.73 Z" fill="#fff"/></g></svg>')
+
+
 @lru_cache(maxsize=4)
 def brand_mark(size: int = 30) -> QIcon:
-    """App logo: two arrows (send / receive) in a rounded accent tile."""
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
-           f'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6f9bff"/>'
-           f'<stop offset="1" stop-color="#7c5cff"/></linearGradient></defs>'
-           f'<rect x="1" y="1" width="30" height="30" rx="9" fill="url(#g)"/>'
-           f'<path d="M11 22V10M7.5 13.5L11 10l3.5 3.5M21 10v12M17.5 18.5L21 22l3.5-3.5" fill="none" stroke="#fff" '
-           f'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+    """FileJet logo: a jet flying up (send) and a jet flying down (receive) in a rounded accent tile."""
+    svg = FILEJET_LOGO
     ic = QIcon()
     for dpr in (1.0, 1.5, 2.0):
         ic.addPixmap(_render(svg, size, dpr))

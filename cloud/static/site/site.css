@@ -54,7 +54,7 @@ p { margin: 0 0 1em; }
   backdrop-filter: saturate(170%) blur(18px); -webkit-backdrop-filter: saturate(170%) blur(18px);
   box-shadow: 0 10px 40px rgba(0,0,0,.35); }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--strong); font-weight: 650; font-size: 1.06rem; letter-spacing: -.02em; }
-.logo { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+.logo { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; overflow: hidden;
   background: linear-gradient(135deg, #7b9bff, #9b7bff); box-shadow: 0 4px 18px rgba(109,141,255,.45), inset 0 1px 0 rgba(255,255,255,.35); }
 .nav-links { display: flex; gap: 2px; margin-left: 18px; }
 .nav-links a { color: var(--muted); font-size: .93rem; font-weight: 500; padding: 8px 12px; border-radius: 10px; transition: color .15s, background .15s; }
