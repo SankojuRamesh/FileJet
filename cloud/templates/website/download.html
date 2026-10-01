@@ -1,0 +1,48 @@
+{% extends "website/base.html" %}
+{% block title %}Download – MediaRush{% endblock %}
+{% block content %}
+<div class="page-head"><div class="bg-grid"></div><div class="glow" style="width:560px;height:360px;left:50%;margin-left:-280px;top:20px;background:#5a46ff;opacity:.4"></div><div class="wrap">
+  <span class="eyebrow">Download</span>
+  <h1><span class="grad-soft">Get</span> <span class="grad">MediaRush</span></h1>
+  <p>One app to share folders, send and receive files and chat with your team. Free to start.</p>
+</div></div>
+
+<section style="padding-top:48px">
+  <div class="wrap" style="max-width:860px">
+    <div class="grid">
+      {% for d in downloads %}
+      <div class="card dl">
+        <div class="ic">{% if d.platform == "windows" %}{% include "website/_icon.html" with name="windows" %}{% else %}{% include "website/_icon.html" with name="linux" %}{% endif %}</div>
+        <div class="grow">
+          <h3 style="margin:0">{{ d.label }}</h3>
+          <div class="meta">{% if d.name %}{{ d.name }} · {{ d.size }}{% else %}{{ d.hint }}{% endif %}</div>
+        </div>
+        {% if d.name %}
+          <a class="btn btn-primary" href="{% url 'download_file' d.name %}">{% include "website/_icon.html" with name="download" %} Download</a>
+        {% else %}
+          <span class="btn btn-ghost" style="cursor:default">Coming soon</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <h2 style="margin-top:64px">Getting started</h2>
+    <div class="grid g3 steps" style="margin-top:24px">
+      <div class="card"><h3>Install</h3><p><b>Windows:</b> run MediaRush.exe – nothing to install.<br><b>Ubuntu:</b> install the .deb, then open MediaRush from the app menu.</p></div>
+      <div class="card"><h3>Create your account</h3><p>Open MediaRush, choose <i>Create one</i> and sign up. Your 9-digit ID is shown under <i>Shared with me</i>.</p></div>
+      <div class="card"><h3>Connect &amp; send</h3><p>Add teammates by ID in <i>Users</i>, share a folder, and send files or folders.</p></div>
+    </div>
+
+    <h3 style="margin-top:48px">Install on Ubuntu / Debian</h3>
+    <div class="code">sudo apt install ./mediarush_*_amd64.deb
+mediarush            # or open MediaRush from the app menu</div>
+
+    <h3 style="margin-top:32px">System requirements</h3>
+    <ul class="checks">
+      <li>Windows 10 or 11 (64-bit), or Ubuntu 22.04 / Debian 12 or newer (64-bit)</li>
+      <li>Internet connection; for transfers between sites, routers with UPnP or an open port help</li>
+      <li>Free disk space for the files you receive</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}

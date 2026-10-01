@@ -337,11 +337,16 @@ class FolderTests(Base):
 
 class PageTests(Base):
     def test_pages_render_and_require_login(self):
-        for url in ("/", "/transfers/", "/folders/", "/users/", "/inbox/", "/devices/", "/subscription/", "/account/"):
+        for url in ("/dashboard/", "/transfers/", "/folders/", "/users/", "/inbox/", "/devices/", "/subscription/",
+                    "/account/"):
             self.assertEqual(self.client.get(url).status_code, 302, url)
+        for url in ("/", "/features/", "/pricing/", "/download/", "/about/"):      # public website
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertContains(self.client.get("/pricing/"), "Pro")                    # plans from the database
         self.register("alice")
         self.assertTrue(self.client.login(username="alice@example.com", password="Str0ng-pass-123"))
-        for url in ("/", "/transfers/", "/folders/", "/users/", "/inbox/", "/devices/", "/subscription/", "/account/"):
+        for url in ("/dashboard/", "/transfers/", "/folders/", "/users/", "/inbox/", "/devices/", "/subscription/",
+                    "/account/", "/"):
             r = self.client.get(url)
             self.assertEqual(r.status_code, 200, url)
         self.assertContains(self.client.get("/api/transfers/stats/"), "completed")
@@ -349,5 +354,5 @@ class PageTests(Base):
     def test_web_register(self):
         r = self.client.post("/register/", {"username": "zoe", "email": "z@example.com", "display_name": "Zoe",
                                             "password": "Str0ng-pass-123", "password2": "Str0ng-pass-123"})
-        self.assertRedirects(r, "/")
+        self.assertRedirects(r, "/dashboard/")
         self.assertEqual(User.objects.get(username="zoe").subscription.plan.code, "free")

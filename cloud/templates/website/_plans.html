@@ -1,0 +1,17 @@
+<div class="plans">
+  {% for p in plans %}
+  <div class="plan{% if p.highlight %} hi{% endif %}">
+    {% if p.highlight %}<span class="badge">POPULAR</span>{% endif %}
+    <h3>{{ p.name }}</h3>
+    <div class="price">{% if p.price %}${{ p.price|floatformat:"-2" }}<small> / month</small>{% else %}$0<small> / month</small>{% endif %}</div>
+    <p class="desc">{{ p.description }}</p>
+    <dl>{% for label, value in p.rows %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
+    {% if p.price %}
+      <a class="btn {% if p.highlight %}btn-accent{% else %}btn-ghost{% endif %}" href="{% url 'subscription' %}">Choose {{ p.name }}</a>
+    {% else %}
+      <a class="btn btn-ghost" href="{% url 'register' %}">Start free</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="incl">All plans: direct encrypted transfers · resume · shared folders with permissions · chat · web dashboard</p>

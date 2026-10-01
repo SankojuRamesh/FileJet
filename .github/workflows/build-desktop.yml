@@ -1,0 +1,42 @@
+# Builds the MediaRush desktop app for Windows and Linux (Ubuntu 22.04 = runs on 22.04 and newer).
+# Run it from GitHub: Actions -> "Build desktop app" -> Run workflow. Downloads: the run's "Artifacts".
+name: Build desktop app
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_url:
+        description: "Cloud URL built into the app"
+        default: "http://iotgateway.live/"
+      signal_url:
+        description: "Signaling URL built into the app (empty = from the cloud)"
+        default: "ws://13.204.80.52:8765/ws"
+  push:
+    tags: ["v*"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "PySide6>=6.6" "cryptography>=42" "websockets>=13" "PyJWT>=2.8" "psutil>=5.9" "pyinstaller>=6"
+      - run: python build_desktop.py --cloud-url "${{ github.event.inputs.cloud_url || 'http://iotgateway.live/' }}" --signal-url "${{ github.event.inputs.signal_url || 'ws://13.204.80.52:8765/ws' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MediaRush-windows
+          path: dist/MediaRush.exe
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash packaging/linux/build_linux.sh --cloud-url "${{ github.event.inputs.cloud_url || 'http://iotgateway.live/' }}" --signal-url "${{ github.event.inputs.signal_url || 'ws://13.204.80.52:8765/ws' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MediaRush-linux
+          path: |
+            dist/*.deb
+            dist/*.tar.gz

@@ -207,6 +207,22 @@ setx P2P_CLOUD_URL "http://iotgateway.live/"
 
 ---
 
+### 7.1 Linux (Ubuntu) build
+
+Build **on an Ubuntu machine** (PyInstaller cannot build Linux programs on Windows). The result runs on the same or
+newer Ubuntu, so build on the oldest version you support (e.g. 22.04):
+```bash
+cd ftp_app
+bash packaging/linux/build_linux.sh            # same built-in servers as the Windows build
+```
+Output in `dist/`: `MediaRush` (single program), `mediarush_2.0.0_amd64.deb` (installer with app-menu entry and icon),
+`MediaRush-linux-x86_64.tar.gz`. Install on a user's PC: `sudo apt install ./mediarush_2.0.0_amd64.deb`.
+
+Automatic builds: `.github/workflows/build-desktop.yml` builds the Windows exe and the Linux .deb (Ubuntu 22.04) on
+GitHub – *Actions → Build desktop app → Run workflow*.
+
+---
+
 ## 8. Deploy the server without Docker (Windows or Linux)
 
 One program, **`serve.py`**, runs the cloud and the signaling server together and reads one settings file
@@ -378,6 +394,12 @@ then restart the server (Windows: stop + start the task; Linux: `sudo systemctl 
 | `DJANGO_SQLITE_PATH` / `DATABASE_URL` | SQLite file (default) or PostgreSQL `postgres://user:pass@host:5432/db`. |
 | `CLOUD_PORT`, `SIGNAL_PORT`, `REFLECTOR_PORT` | 8000 / 8765 / 8766. |
 | `EMAIL_*`, `DEFAULT_FROM_EMAIL`, `SHOW_EMAIL_OUTBOX` | E-mail, see 8.4. |
+| `SITE_COMPANY` | Company name on the website (footer, About). Default `MediaRush`. |
+| `SITE_CONTACT_EMAIL` | Shows *Contact* and *Request a demo* buttons on the website when set. |
+| `DOWNLOADS_DIR` | Folder with the files offered on `/download/` (default `cloud/downloads/`): put `MediaRush.exe`, `mediarush_*_amd64.deb`, `MediaRush-linux-x86_64.tar.gz` there. |
+
+**Public website:** `/` (home), `/features/`, `/pricing/` (prices come from the plans in the database – edit them in
+`/admin/` → Plans), `/download/`, `/about/`. The signed-in dashboard is at `/dashboard/`.
 
 Check the settings without starting the server: `python serve.py --env server.env --check`.
 

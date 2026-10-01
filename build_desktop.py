@@ -3,6 +3,7 @@
     pip install -r requirements.txt pyinstaller
     python build_desktop.py                                        # cloud: http://iotgateway.live/
     python build_desktop.py --cloud-url http://192.168.1.20:8000/  # a build for another server
+    python build_desktop.py --signal-url ""                        # signaling address: ask the cloud (automatic)
 
 Produces dist/MediaRush(.exe) with the cloud URL built in (users can still change it on the sign-in screen).
 The cloud (Django) and the signaling server are server-side and are NOT bundled.
@@ -14,25 +15,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CLOUD_URL = "http://iotgateway.live/"
+# Signaling server the app connects to. Empty = use what the cloud announces (GET /api/config/).
+DEFAULT_SIGNAL_URL = "ws://13.204.80.52:8765/ws"
 _QT_APP = None
 EXCLUDE = ["server", "cloud", "django", "rest_framework", "fastapi", "starlette", "uvicorn", "pydantic",
            "httpx", "pytest", "tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore",
            "PySide6.QtQuick", "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtCharts", "PySide6.QtPdf"]
 
 
-def write_build_info(cloud_url: str) -> None:
-    """client/build_info.py is read by the app for its default cloud URL."""
+def write_build_info(cloud_url: str, signal_url: str = "") -> None:
+    """client/build_info.py is read by the app for its default cloud and signaling URLs."""
     url = cloud_url.strip().rstrip("/") + "/"
     if not url.startswith(("http://", "https://")):
         sys.exit(f"--cloud-url must start with http:// or https:// (got {cloud_url!r})")
+    sig = signal_url.strip()
+    if sig and not sig.startswith(("ws://", "wss://")):
+        sys.exit(f"--signal-url must start with ws:// or wss:// (got {signal_url!r})")
     (ROOT / "client" / "build_info.py").write_text(
-        '"""Written by build_desktop.py - the cloud this build connects to by default."""\n'
-        f"CLOUD_URL = {url!r}\n", encoding="utf-8")
-    print(f"cloud URL built in: {url}")
+        '"""Written by build_desktop.py - the servers this build connects to by default."""\n'
+        f"CLOUD_URL = {url!r}\n"
+        f"SIGNAL_URL = {sig!r}      # empty = use what the cloud announces\n", encoding="utf-8")
+    print(f"cloud URL built in:     {url}")
+    print(f"signaling URL built in: {sig or '(automatic, from the cloud)'}")
 
 
 def make_icon() -> Path | None:
-    """MediaRush logo as a Windows .ico (from the same vector logo the app shows)."""
+    """MediaRush logo as build/mediarush.ico (Windows exe) and build/mediarush.png (Linux app menu)."""
     try:
         sys.path.insert(0, str(ROOT))
         from PySide6.QtGui import QGuiApplication
@@ -41,7 +49,9 @@ def make_icon() -> Path | None:
         from client.gui import icons
         out = ROOT / "build" / "mediarush.ico"
         out.parent.mkdir(exist_ok=True)
-        if icons.brand_mark(256).pixmap(256, 256).save(str(out), "ICO"):
+        pixmap = icons.brand_mark(256).pixmap(256, 256)
+        pixmap.save(str(out.with_suffix(".png")), "PNG")
+        if pixmap.save(str(out), "ICO"):
             return out
     except Exception as exc:                       # noqa: BLE001 - an icon must never break the build
         print(f"(no icon: {exc})")
@@ -64,7 +74,9 @@ def build(name: str = "MediaRush", entry: str = "mediarush.py") -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Build the MediaRush desktop app")
     ap.add_argument("--cloud-url", default=DEFAULT_CLOUD_URL, help=f"cloud the app uses by default ({DEFAULT_CLOUD_URL})")
+    ap.add_argument("--signal-url", default=DEFAULT_SIGNAL_URL,
+                    help=f'signaling server, "" = from the cloud (default {DEFAULT_SIGNAL_URL})')
     args = ap.parse_args()
-    write_build_info(args.cloud_url)
+    write_build_info(args.cloud_url, args.signal_url)
     build()
     print("\nDone: see dist/")

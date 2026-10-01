@@ -1,0 +1,120 @@
+{% extends "website/base.html" %}
+{% block title %}Features – MediaRush{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:560px;height:360px;left:50%;margin-left:-280px;top:20px;background:#3d5bff;opacity:.4"></div>
+  <div class="wrap">
+    <span class="eyebrow">Features</span>
+    <h1><span class="grad-soft">Fast. Direct.</span><br><span class="grad">Under your control.</span></h1>
+    <p>Everything MediaRush does to move large files and folders between people – quickly, safely and without a cloud in between.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="row reveal">
+      <div class="row-text">
+        <span class="eyebrow">Share</span>
+        <h2>Folders on your own storage</h2>
+        <p>Share any folder on your PC, external drive or NAS with one person or a whole team. Watch deliveries arrive and keep a full record.</p>
+        <ul class="checks">
+          <li>Share folders and Submit (drop-box) folders</li>
+          <li>Received-files log with sender, time, size and form details</li>
+          <li>“Arriving now” with live size, speed and time left</li>
+          <li>Free-space display – no storage to rent</li>
+        </ul>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="folders" alt="Folder owner view" w=1240 h=700 %}</div>
+    </div>
+
+    <div class="row rev reveal">
+      <div class="row-text">
+        <span class="eyebrow">Permissions</span>
+        <h2>Everyone gets exactly the access they need</h2>
+        <p>Decide per person and per folder. Every request is checked by the folder owner’s app – changes apply instantly, even to running transfers.</p>
+        <ul class="checks">
+          <li>View &amp; download · Upload · Edit · Delete</li>
+          <li>Roles: Uploader, Viewer, Editor, Manager – or custom</li>
+          <li>Groups, access expiry and invitation e-mails with the folder ID</li>
+          <li>Rules: allowed file types, maximum size, required form fields</li>
+        </ul>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="shared" alt="Shared folder with permissions" w=1240 h=700 %}</div>
+    </div>
+
+    <div class="row reveal">
+      <div class="row-text">
+        <span class="eyebrow">Transfer</span>
+        <h2>Fast, verified and unstoppable</h2>
+        <p>Files are split into chunks and sent over several encrypted streams at once. Every chunk is verified before it counts.</p>
+        <ul class="checks">
+          <li>Automatic resume after network or power loss</li>
+          <li>Outbox: send now, delivered when the recipient is online</li>
+          <li>Sending and receiving progress with sizes and time left</li>
+          <li>Works in the office and across the internet (UPnP, STUN, hole punching)</li>
+        </ul>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="transfers" alt="Transfers with live progress" w=1240 h=700 %}</div>
+    </div>
+
+    <div class="row rev reveal">
+      <div class="row-text">
+        <span class="eyebrow">Team</span>
+        <h2>Online status and chat, next to your files</h2>
+        <p>See who is available and talk about the work without switching apps.</p>
+        <ul class="checks">
+          <li>Online / offline status for everyone you work with</li>
+          <li>End-to-end encrypted messages with delivered and read ticks</li>
+          <li>Messages to offline people are delivered when they come back</li>
+        </ul>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="chat" alt="Built-in team chat" w=1240 h=700 %}</div>
+    </div>
+
+    <div class="row reveal">
+      <div class="row-text">
+        <span class="eyebrow">Users</span>
+        <h2>Your people, organised</h2>
+        <p>Add teammates by their ID, group them, and give a whole group access to a folder in one step.</p>
+        <ul class="checks">
+          <li>Add by 9-digit ID, username or e-mail</li>
+          <li>Groups such as Editors, Colorists or Clients</li>
+          <li>One click to chat with anyone</li>
+        </ul>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="users" alt="Users and groups" w=1240 h=700 %}</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section>
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">Security &amp; platform</span><h2>Private by design</h2></div>
+    <div class="grid g3">
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="lock" %}</div><h3>No cloud storage</h3>
+        <p>Your files are never uploaded to or stored on our servers. The cloud keeps accounts, permissions and transfer metadata only.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="key" %}</div><h3>Encrypted end to end</h3>
+        <p>TLS 1.3 between the two computers with device certificates, plus end-to-end encrypted control messages and chat.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="shield" %}</div><h3>Verified integrity</h3>
+        <p>SHA-256 on every chunk and the whole file – the received copy is identical to the original.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="windows" %}</div><h3>Windows &amp; Linux</h3>
+        <p>One app for Windows 10/11 and Ubuntu/Debian – share, send, receive and chat.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="layout" %}</div><h3>A workspace you can shape</h3>
+        <p>Resizable panels, keyboard shortcuts and a layout that remembers itself.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="chart" %}</div><h3>Dashboard &amp; API</h3>
+        <p>Manage users and folders and review transfers from any browser – or automate with the REST API.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap"><div class="cta reveal">
+    <h2>Try it on your next project</h2>
+    <p>Free to start – upgrade when your team grows.</p>
+    <div class="hero-cta"><a class="btn btn-primary btn-lg" href="{% url 'download' %}">Download MediaRush</a><a class="btn btn-ghost btn-lg" href="{% url 'pricing' %}">Compare plans</a></div>
+  </div></div>
+</section>
+{% endblock %}

@@ -174,16 +174,22 @@ def default_data_dir(app: str) -> Path:
     return old if old.exists() else Path.home() / ".mediarush" / app
 
 
-try:                                   # written by build_desktop.py --cloud-url ...
+try:                                   # written by build_desktop.py --cloud-url ... --signal-url ...
     from ..build_info import CLOUD_URL as DEFAULT_CLOUD_URL
 except ImportError:
     DEFAULT_CLOUD_URL = "http://iotgateway.live/"   # MediaRush cloud (change with "Change" on the sign-in screen)
+try:
+    from ..build_info import SIGNAL_URL as DEFAULT_SIGNAL_URL
+except ImportError:
+    DEFAULT_SIGNAL_URL = ""                         # "" = the address the cloud announces
 # addresses older builds saved as their default - an installed app moves to DEFAULT_CLOUD_URL
 _OLD_DEFAULTS = ("http://127.0.0.1:8000/", "http://localhost:8000/", "https://iotgateway.live/")
 
 
 def load_settings(data_dir: Path) -> dict:
-    s = {"cloud_url": os.environ.get("P2P_CLOUD_URL", DEFAULT_CLOUD_URL), "server_override": "",
+    frozen = getattr(sys, "frozen", False)               # the packaged MediaRush.exe (not a source/dev run)
+    s = {"cloud_url": os.environ.get("P2P_CLOUD_URL", DEFAULT_CLOUD_URL),
+         "server_override": DEFAULT_SIGNAL_URL if frozen else "",
          "download_dir": str(Path.home() / "Downloads" / "MediaRush"), "streams": 4, "max_streams": 8,
          "chunk_size": "Auto", "rate_limit": "", "use_upnp": True, "use_stun": True, "allow_punch": True,
          "verify_full": False}
@@ -194,6 +200,8 @@ def load_settings(data_dir: Path) -> dict:
         pass
     if getattr(sys, "frozen", False) and s.get("cloud_url") in _OLD_DEFAULTS and "P2P_CLOUD_URL" not in os.environ:
         s["cloud_url"] = DEFAULT_CLOUD_URL
+    if getattr(sys, "frozen", False) and DEFAULT_SIGNAL_URL and not s.get("server_override"):
+        s["server_override"] = DEFAULT_SIGNAL_URL      # settings saved by an older build: use this build's server
     return s
 
 

@@ -1,0 +1,1 @@
+{% load static %}<img src="{% static 'site/img/'|add:name|add:'.webp' %}" srcset="{% static 'site/img/'|add:name|add:'.webp' %} 1x, {% static 'site/img/'|add:name|add:'@2x.webp' %} 2x" alt="{{ alt }}" width="{{ w }}" height="{{ h }}"{% if not eager %} loading="lazy"{% endif %} decoding="async">

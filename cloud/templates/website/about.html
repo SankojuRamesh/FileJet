@@ -1,0 +1,76 @@
+{% extends "website/base.html" %}
+{% block title %}About – MediaRush{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:560px;height:360px;left:50%;margin-left:-280px;top:20px;background:#5a46ff;opacity:.4"></div>
+  <div class="wrap">
+    <span class="eyebrow">About</span>
+    <h1><span class="grad-soft">Big files deserve</span><br><span class="grad">a direct route.</span></h1>
+    <p>Moving large media shouldn’t mean uploading it to someone else’s cloud – and then waiting for everyone to download it again.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="row reveal">
+      <div class="row-text">
+        <span class="eyebrow">The application</span>
+        <h2>What MediaRush is</h2>
+        <p>A desktop application for Windows and Linux that moves files and folders of any size directly between computers.
+          Folders stay on your own PC or NAS; you decide who can see, upload, edit or delete in each one.</p>
+        <p>Transfers run over several encrypted streams in parallel, every chunk is verified, and an interrupted transfer picks up
+          exactly where it stopped – after a network drop, a sleeping laptop or a power cut.</p>
+      </div>
+      <div class="shot">{% include "website/_pic.html" with name="transfers" alt="MediaRush transfers" w=1240 h=700 %}</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section>
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">How it’s built</span><h2>Three parts, one simple experience</h2></div>
+    <div class="grid g3">
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="windows" %}</div><h3>The app</h3>
+        <p>Runs on every user’s computer. It holds the folders, sends and receives the files and enforces every permission.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="globe" %}</div><h3>The cloud</h3>
+        <p>Accounts, sign-in, users, folders and permissions, transfer history and the dashboard – metadata only, never file contents.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="bolt" %}</div><h3>The connector</h3>
+        <p>Introduces two computers to each other and shows who is online. Once connected, files flow directly between them.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">Principles</span><h2>What we stand for</h2></div>
+    <div class="grid g2">
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="lock" %}</div><h3>Your files, your machines</h3>
+        <p>We never store your files. They move from your computer to the people you choose – nowhere else.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="bolt" %}</div><h3>Speed without compromise</h3>
+        <p>Big files should move at the speed of your connection, with integrity checks you never have to think about.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="shield" %}</div><h3>Security by default</h3>
+        <p>Encryption, device certificates and permission checks on every request – on by default, not an add-on.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="users" %}</div><h3>Made for real teams</h3>
+        <p>Studios, broadcasters, agencies and freelancers work differently – Share, Submit and Send fit each workflow.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta reveal">
+      <span class="eyebrow">About us</span>
+      <h2>{{ company }}</h2>
+      <p>We build MediaRush for people who move large media every day – editors, producers, studios and the IT teams behind them.
+        Our goal: the fastest, safest way to get a file from one computer to another, with you in control of who sees what.</p>
+      <div class="hero-cta">
+        {% if contact_email %}<a class="btn btn-primary btn-lg" href="mailto:{{ contact_email }}">Contact us</a>{% endif %}
+        <a class="btn {% if contact_email %}btn-ghost{% else %}btn-primary{% endif %} btn-lg" href="{% url 'download' %}">Download MediaRush</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

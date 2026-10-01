@@ -1,0 +1,35 @@
+{% extends "website/base.html" %}
+{% block title %}Pricing – MediaRush{% endblock %}
+{% block content %}
+<div class="page-head"><div class="bg-grid"></div><div class="glow" style="width:560px;height:360px;left:50%;margin-left:-280px;top:20px;background:#3d5bff;opacity:.4"></div><div class="wrap">
+  <span class="eyebrow">Pricing</span>
+  <h1><span class="grad-soft">Simple,</span> <span class="grad">transparent pricing</span></h1>
+  <p>Start free with a small team. Upgrade for unlimited file sizes, more users and more shared folders.</p>
+</div></div>
+
+<section style="padding-top:48px">
+  <div class="wrap">
+    {% if plans %}{% include "website/_plans.html" %}{% else %}<p class="muted" style="text-align:center">Plans will be published soon.</p>{% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head"><span class="eyebrow">FAQ</span><h2>Questions about plans</h2></div>
+    <div class="faq reveal">
+      <details open><summary>Do my files go through your servers?</summary>
+        <p>No. Files travel directly from the sender’s computer to the receiver’s. Our servers only handle sign-in, permissions and transfer
+          information such as file names, sizes and status. That is also why plan limits are about users, folders and volume – not storage.</p></details>
+      <details><summary>What counts towards the monthly transfer volume?</summary>
+        <p>The total size of the files you send in a month. Business has no volume limit.</p></details>
+      <details><summary>Who needs a paid plan – the sender or the folder owner?</summary>
+        <p>The number of users and shared folders depends on the plan of the person who shares. File size and monthly volume
+          depend on the plan of the person who sends. People who only receive or send small files can stay on Free.</p></details>
+      <details><summary>Can I change plans later?</summary>
+        <p>Yes – upgrade or downgrade at any time from your account’s Subscription page.</p></details>
+      <details><summary>What happens if a transfer is interrupted?</summary>
+        <p>It resumes automatically from the last verified chunk when the connection is back – on every plan.</p></details>
+    </div>
+  </div>
+</section>
+{% endblock %}

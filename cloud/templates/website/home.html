@@ -1,0 +1,202 @@
+{% extends "website/base.html" %}
+{% block content %}
+{# ================================================================ hero #}
+<section class="hero">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:620px;height:420px;left:8%;top:40px;background:#3d5bff"></div>
+  <div class="glow" style="width:520px;height:380px;right:6%;top:120px;background:#7a4dff;opacity:.4"></div>
+  <div class="wrap">
+    <a class="chip" href="{% url 'features' %}"><b>New</b> Send to offline teammates · resume after power loss →</a>
+    <h1><span class="grad-soft">Move big media files.</span><br><span class="grad">Directly. At full speed.</span></h1>
+    <p class="lead">MediaRush sends files and whole folders of any size straight from one computer to another –
+      encrypted, resumable and organised in shared folders with permissions. No cloud in between.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="{% url 'download' %}">{% include "website/_icon.html" with name="download" %} Download for free</a>
+      {% if contact_email %}<a class="btn btn-ghost btn-lg" href="mailto:{{ contact_email }}?subject=MediaRush%20demo">Book a demo</a>
+      {% else %}<a class="btn btn-ghost btn-lg" href="{% url 'pricing' %}">View pricing</a>{% endif %}
+    </div>
+    <div class="hero-note"><span>Windows &amp; Linux</span><span>Free plan</span><span>Files never stored on our servers</span></div>
+
+    <div class="stage">
+      <div class="frame"><div class="frame-inner">
+        <div class="frame-bar"><i></i><i></i><i></i><span>MediaRush — Feature Film · Reel 2</span></div>
+        {% include "website/_pic.html" with name="folders" alt="MediaRush: a shared project folder receiving files, with progress, senders and thumbnails" w=1240 h=700 eager=1 %}
+      </div></div>
+      <div class="float f1">{% include "website/_pic.html" with name="crop-uploads" alt="Uploads in progress with sizes and progress bars" w=837 h=223 %}</div>
+      <div class="float f2">{% include "website/_pic.html" with name="crop-contacts" alt="Teammates online with unread messages" w=291 h=161 %}</div>
+    </div>
+
+    <div class="label-small">Built for teams that move large files</div>
+    <div class="marquee" aria-hidden="true"><div class="marquee-track">
+      {% for i in "12" %}<span>Film &amp; post-production</span><span>Broadcast &amp; sports</span><span>Advertising agencies</span><span>Game studios</span><span>VFX &amp; animation</span><span>Photography</span><span>Music &amp; audio</span><span>Architecture &amp; 3D</span><span>Engineering &amp; IT</span><span>Events &amp; live production</span>{% endfor %}
+    </div></div>
+  </div>
+</section>
+
+{# ================================================================ bento #}
+<section>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Why MediaRush</span>
+      <h2>Everything big files need.<br><span class="muted">Nothing they don’t.</span></h2>
+    </div>
+    <div class="bento">
+      <div class="cell c4 reveal">
+        <h3>Built for speed</h3>
+        <p>Parallel encrypted streams use your full connection. Live sizes, speed and time left on both sides.</p>
+        <div class="ui">{% include "website/_pic.html" with name="crop-arriving" alt="Files arriving with live progress and time left" w=855 h=76 %}</div>
+      </div>
+      <div class="cell c2 reveal">
+        <div class="ic">{% include "website/_icon.html" with name="lock" %}</div>
+        <div class="big grad">0 bytes</div>
+        <h3>stored on our servers</h3>
+        <p>Files go computer to computer. Our cloud only knows names, sizes and status.</p>
+      </div>
+      <div class="cell c2 reveal">
+        <div class="ic">{% include "website/_icon.html" with name="resume" %}</div>
+        <h3>Never start over</h3>
+        <p>Network drop, sleeping laptop, power cut – transfers resume from the last verified chunk.</p>
+        <div class="big grad" style="margin-top:auto;padding-top:20px">Resume</div>
+      </div>
+      <div class="cell c4 reveal">
+        <h3>Access exactly as you decide</h3>
+        <p>View &amp; download, Upload, Edit, Delete – per person, per folder, effective instantly.</p>
+        <div class="ui">{% include "website/_pic.html" with name="crop-permissions" alt="Per-person permissions and actions in a shared folder" w=837 h=75 %}</div>
+      </div>
+      <div class="cell c3 reveal">
+        <h3>Your team, online</h3>
+        <p>See who is available and chat right next to your files – end-to-end encrypted.</p>
+        <div class="ui" style="max-width:320px">{% include "website/_pic.html" with name="crop-contacts" alt="Team list with online status" w=291 h=161 %}</div>
+      </div>
+      <div class="cell c3 reveal">
+        <h3>Every delivery on record</h3>
+        <p>Who sent what, when and how big – with thumbnails for images and videos.</p>
+        <div class="ui">{% include "website/_pic.html" with name="crop-received" alt="Received files log with thumbnails and senders" w=850 h=204 %}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+{# ================================================================ product tabs #}
+<section>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">The app</span>
+      <h2>One app for sharing, sending<br>and receiving</h2>
+    </div>
+    <div class="tabs reveal">
+      <input type="radio" name="tabs" id="t1" checked><input type="radio" name="tabs" id="t2"><input type="radio" name="tabs" id="t3">
+      <div class="tab-labels"><label for="t1">Your folders</label><label for="t2">Shared with you</label><label for="t3">Transfers</label></div>
+      <div class="tab-panels">
+        <div class="tab-panel p1"><p>Share any folder on your PC or NAS. Watch deliveries arrive and keep a full log of what came in.</p>
+          <div class="shot">{% include "website/_pic.html" with name="folders" alt="Folder owner view" w=1240 h=700 %}</div></div>
+        <div class="tab-panel p2"><p>See the folders shared with you and work in them exactly as permitted – send files, download, edit.</p>
+          <div class="shot">{% include "website/_pic.html" with name="shared" alt="Shared with me view" w=1240 h=700 %}</div></div>
+        <div class="tab-panel p3"><p>Every transfer in one place: sending and receiving, sizes, speed, time left and history.</p>
+          <div class="shot">{% include "website/_pic.html" with name="transfers" alt="Transfers view" w=1240 h=700 %}</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ================================================================ three ways #}
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="grid g3">
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="folder" %}</div><h3>Share</h3>
+        <p>A project folder the team works in together – each person with their own rights.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="inbox" %}</div><h3>Submit</h3>
+        <p>A drop box for deliveries. People send in, without seeing what’s inside. Optional type, size and form rules.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="offline" %}</div><h3>Send anytime</h3>
+        <p>Recipient offline? Files wait on your computer and arrive automatically when they’re back.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+{# ================================================================ benefits #}
+<section>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Built different</span>
+      <h2>Replace upload links, FTP<br>and cloud drives</h2>
+      <p>For files that are too big, too important or too urgent for the usual tools.</p>
+    </div>
+    <div class="grid g4">
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="bolt" %}</div><h3>Speed</h3><p>Parallel streams, large chunks, no detour through a cloud.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="shield" %}</div><h3>Integrity</h3><p>SHA-256 on every chunk – the copy is identical, guaranteed.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="key" %}</div><h3>Encryption</h3><p>TLS 1.3 between devices and end-to-end encrypted chat.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="folder" %}</div><h3>Any size</h3><p>From a PDF to huge video masters and full folder trees.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="users" %}</div><h3>Teams</h3><p>Roles, groups, expiry and invitation e-mails.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="rules" %}</div><h3>Rules</h3><p>Accept only the file types and sizes you want, ask for metadata.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="chart" %}</div><h3>Dashboard &amp; API</h3><p>Web dashboard with history and statistics, plus a REST API.</p></div>
+      <div class="card reveal"><div class="ic">{% include "website/_icon.html" with name="globe" %}</div><h3>Anywhere</h3><p>Office, home or on location – Windows and Linux.</p></div>
+    </div>
+  </div>
+</section>
+
+{# ================================================================ how it works #}
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">Get started</span><h2>Running in three minutes</h2></div>
+    <div class="grid g3 steps">
+      <div class="card reveal"><h3>Install &amp; sign up</h3><p>Download MediaRush for Windows or Linux and create your free account.</p></div>
+      <div class="card reveal"><h3>Invite &amp; share</h3><p>Add teammates by their ID, share a folder and choose what each may do.</p></div>
+      <div class="card reveal"><h3>Send</h3><p>Drop in files or folders – they travel directly, encrypted, and resume if interrupted.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+{# ================================================================ pricing #}
+{% if plans %}
+<section>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Pricing</span>
+      <h2>Start free. Scale when you grow.</h2>
+      <p>Simple plans for individuals, studios and large teams.</p>
+    </div>
+    <div class="reveal">{% include "website/_plans.html" %}</div>
+  </div>
+</section>
+{% endif %}
+
+{# ================================================================ FAQ #}
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">FAQ</span><h2>Questions, answered</h2></div>
+    <div class="faq reveal">
+      <details><summary>Where are my files stored?</summary>
+        <p>Only on your own computers and storage. MediaRush sends files directly between the two computers; our servers handle
+          sign-in, permissions and transfer status only.</p></details>
+      <details><summary>Is there a file size limit?</summary>
+        <p>No limit on Pro and Business. The Free plan allows files up to 20 GB.</p></details>
+      <details><summary>What if the connection drops during a transfer?</summary>
+        <p>MediaRush resumes automatically from the last verified chunk when the connection is back – also after a restart.</p></details>
+      <details><summary>Can I send to someone who is offline?</summary>
+        <p>Yes. Files wait in your outbox and are delivered automatically as soon as the folder owner comes online.</p></details>
+      <details><summary>Which systems are supported?</summary>
+        <p>Windows 10/11 and Ubuntu/Debian Linux (64-bit). The web dashboard works in any modern browser.</p></details>
+    </div>
+  </div>
+</section>
+
+{# ================================================================ CTA #}
+<section>
+  <div class="wrap">
+    <div class="cta reveal">
+      <h2>Stop waiting for uploads.</h2>
+      <p>Send your next big project directly. It’s free to start.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="{% url 'download' %}">{% include "website/_icon.html" with name="download" %} Download MediaRush</a>
+        <a class="btn btn-ghost btn-lg" href="{% url 'features' %}">Explore features</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "billing",
     "transfers",
     "sharing",
+    "website",
 ]
 
 MIDDLEWARE = [
@@ -119,8 +120,13 @@ STORAGES = {
 }
 
 LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/"
+
+# Public website (/, /features/, /pricing/, /download/, /about/)
+SITE_COMPANY = os.environ.get("SITE_COMPANY", "MediaRush")
+SITE_CONTACT_EMAIL = os.environ.get("SITE_CONTACT_EMAIL", "")      # shown as "Contact" / "Request a demo" when set
+DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", str(BASE_DIR / "downloads"))   # MediaRush.exe, .deb, .tar.gz
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
