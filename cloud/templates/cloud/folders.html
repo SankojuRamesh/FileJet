@@ -1,0 +1,93 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Folders{% endblock %}
+{% block titlebar %}Folders &amp; permissions{% endblock %}
+{% block content %}
+<h1>Folders &amp; permissions</h1>
+<h2>Folders I administer ({{ owned|length }})</h2>
+{% for f in owned %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:8px">
+    <span style="color:var(--folder)">{% icon "folder" 18 %}</span>
+    <strong style="font-size:15px;color:var(--text-strong)">{{ f.name }}</strong>
+    <code style="font-size:13px">{{ f.folder_id }}</code>
+    <span class="pill {% if f.kind == 'submit' %}paused{% else %}active{% endif %}">{{ f.get_kind_display }}</span>
+    <span class="grow"></span>
+    <span class="muted">created {{ f.created_at|date:"Y-m-d H:i" }}</span>
+  </div>
+  <p class="muted" style="margin:0 0 10px">
+    {% if f.description %}{{ f.description }} · {% endif %}
+    File types: {{ f.allowed_extensions|default:"any" }} ·
+    Max file size: {{ f.max_file_size|filesize }} ·
+    Upload form: {% for fld in f.form_fields %}{{ fld.name }}{% if fld.required %}*{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %} ·
+    Upload e-mails: {{ f.notify_owner|yesno:"on,off" }}
+  </p>
+  <div class="stats" style="margin-bottom:12px">
+    <div class="stat"><div class="label">Files received</div><div class="value ok">{{ f.stats.files }}</div></div>
+    <div class="stat"><div class="label">Total size</div><div class="value">{{ f.stats.bytes|filesize }}</div></div>
+    <div class="stat"><div class="label">Waiting for you</div><div class="value{% if f.stats.waiting %} info{% endif %}">{{ f.stats.waiting }}</div></div>
+    <div class="stat"><div class="label">Senders</div><div class="value">{{ f.stats.senders }}</div></div>
+    <div class="stat"><div class="label">Last upload</div><div class="value" style="font-size:15px">{{ f.stats.last_upload|date:"Y-m-d H:i"|default:"-" }}</div></div>
+  </div>
+  <div class="table-wrap"><table class="grid">
+    <thead><tr><th>User</th><th>ID</th><th>Role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th>E-mail sent</th><th>Access until</th></tr></thead>
+    <tbody>{% for m in f.members.all %}
+      <tr><td><span class="user"><span class="avatar">{{ m.user.label|slice:":1"|upper }}</span>{{ m.user.label }}</span> <span class="muted">{{ m.user.email }}</span></td>
+        <td class="mono">{{ m.user.formatted_id }}</td><td>{{ m.role|title }}</td>
+        <td>{% if m.can_read %}<span class="pill completed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_upload %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_edit %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_delete %}<span class="pill failed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.status == "active" %}<span class="pill completed">opened</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+        <td>{{ m.email_sent_at|date:"Y-m-d H:i"|default:"-" }}</td>
+        <td>{{ m.expires_at|date:"Y-m-d"|default:"-" }}{% if m.via_group %} <span class="muted">({{ m.via_group }})</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="10" class="empty">No users yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  <h2 style="margin-top:14px">Files sent to this folder</h2>
+  <div class="table-wrap"><table class="grid">
+    <thead><tr><th>File</th><th>From</th><th class="num">Size</th><th>Status</th><th>Sent</th><th>Completed</th></tr></thead>
+    <tbody>{% for t in f.recent_files %}
+      <tr><td class="name">{{ t.relative_path|default:t.file_name }}</td><td>{{ t.sender.label|default:"-" }}</td>
+        <td class="num">{{ t.file_size|filesize }}</td>
+        <td><span class="pill {{ t.status }}">{% if t.status == "queued" %}waiting for admin{% else %}{{ t.status }}{% endif %}</span></td>
+        <td>{{ t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>
+    {% empty %}<tr><td colspan="6" class="empty">Nothing sent yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% with events=f.events.all|slice:":8" %}{% if events %}
+  <h2 style="margin-top:14px">Recent activity</h2>
+  <div class="table-wrap"><table class="grid">
+    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Path</th><th>Detail</th></tr></thead>
+    <tbody>{% for e in events %}
+      <tr><td>{{ e.created_at|date:"Y-m-d H:i:s" }}</td><td>{{ e.actor.label|default:f.owner.label }}</td>
+        <td><span class="pill {% if e.action == 'delete' %}failed{% elif e.action == 'join' or e.action == 'access' %}completed{% else %}active{% endif %}">{{ e.action }}</span></td>
+        <td class="mono">{{ e.path|default:"-" }}</td><td class="muted">{{ e.detail }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% endif %}{% endwith %}
+</div>
+{% empty %}
+<div class="card muted">No folders yet.</div>
+{% endfor %}
+
+<h2>Folders shared with me ({{ mine|length }})</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Folder</th><th>Folder ID</th><th>Admin</th><th>My role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th></tr></thead>
+  <tbody>{% for m in mine %}
+    <tr><td class="name">{{ m.folder.name }}</td><td class="mono">{{ m.folder.folder_id }}</td>
+      <td>{{ m.folder.owner.label }} <span class="muted">@{{ m.folder.owner.username }}</span></td><td>{{ m.role|title }}</td>
+      <td>{{ m.can_read|yesno:"✓,-" }}</td><td>{{ m.can_upload|yesno:"✓,-" }}</td><td>{{ m.can_edit|yesno:"✓,-" }}</td><td>{{ m.can_delete|yesno:"✓,-" }}</td>
+      <td>{% if m.status == "active" %}<span class="pill completed">opened</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="9" class="empty">No folder has been shared with you.</td></tr>{% endfor %}
+  </tbody></table></div>
+
+{% if sent %}
+<h2>Files I sent</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>File</th><th>Folder</th><th class="num">Size</th><th>Status</th><th>Sent</th><th>Delivered</th></tr></thead>
+  <tbody>{% for t in sent %}
+    <tr><td class="name">{{ t.relative_path|default:t.file_name }}</td><td>{{ t.folder_name }}</td>
+      <td class="num">{{ t.file_size|filesize }}</td>
+      <td><span class="pill {{ t.status }}">{% if t.status == "queued" %}waiting for admin{% else %}{{ t.status }}{% endif %}</span></td>
+      <td>{{ t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endif %}
+{% endblock %}

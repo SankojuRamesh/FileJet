@@ -1,0 +1,14 @@
+{% extends "cloud/auth_base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<form method="post" novalidate>{% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {{ field.errors }}
+  {% endfor %}
+  <button class="btn" type="submit">Create account</button>
+</form>
+<p class="alt">Already registered? <a href="{% url 'login' %}">Sign in</a></p>
+{% endblock %}

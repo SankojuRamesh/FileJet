@@ -1,0 +1,10 @@
+# TLS termination (certificates are obtained automatically).
+{$P2P_DOMAIN} {
+	encode zstd gzip
+	# WebSockets: connection setup and presence (signaling server)
+	reverse_proxy /ws signaling:8765
+	reverse_proxy /ws/presence signaling:8765
+	reverse_proxy /healthz signaling:8765
+	# Everything else: the cloud app (web dashboard + REST API)
+	reverse_proxy cloud:8000
+}

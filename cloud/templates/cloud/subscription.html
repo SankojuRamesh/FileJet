@@ -1,0 +1,47 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Subscription{% endblock %}
+{% block titlebar %}Subscription{% endblock %}
+{% block content %}
+<h1>Subscription</h1>
+<div class="card">
+  <div class="row" style="align-items:center">
+    <div style="flex:1;min-width:260px">
+      <div class="muted">Current plan</div>
+      <div style="font-size:22px;color:var(--text-strong)">{{ sub.plan.name }}
+        {% if sub.cancel_at_period_end %}<span class="pill paused">ends {{ sub.current_period_end|date:"Y-m-d" }}</span>{% endif %}</div>
+      <div class="muted">Period {{ sub.current_period_start|date:"Y-m-d" }} → {{ sub.current_period_end|date:"Y-m-d" }}</div>
+    </div>
+    <div style="flex:1;min-width:260px">
+      <div class="muted">Transfer quota this period</div>
+      <div class="meter"><i style="width:{{ usage_pct|floatformat:1 }}%"></i></div>
+      <div>{{ usage.used_bytes|filesize }} used of {{ usage.quota_bytes|filesize }}</div>
+    </div>
+  </div>
+</div>
+
+<h2>Plans</h2>
+<div class="plans">
+{% for p in plans %}
+  <div class="plan {% if p.pk == sub.plan_id %}current{% endif %}">
+    <strong>{{ p.name }}</strong>
+    <div class="price">{% if p.price_month %}${{ p.price_month }}<span class="muted" style="font-size:13px"> / month</span>{% else %}Free{% endif %}</div>
+    <div class="muted">{{ p.description }}</div>
+    <ul>
+      <li>Max file size: {{ p.max_file_size|filesize }}</li>
+      <li>Monthly transfer: {{ p.monthly_quota|filesize }}</li>
+      <li>Users you can add: {{ p.max_users|default_if_none:"Unlimited" }}</li>
+      <li>Folders: {{ p.max_folders|default_if_none:"Unlimited" }}</li>
+      <li>Transfers: direct P2P, files never stored in the cloud</li>
+    </ul>
+    {% if p.pk == sub.plan_id %}
+      {% if p.code != "free" and not sub.cancel_at_period_end %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="cancel"><button class="btn secondary" style="width:100%;justify-content:center">Cancel at period end</button></form>
+      {% else %}<button class="btn secondary" disabled style="width:100%;justify-content:center">Current plan</button>{% endif %}
+    {% else %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="plan" value="{{ p.code }}"><button class="btn" style="width:100%;justify-content:center">Switch to {{ p.name }}</button></form>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

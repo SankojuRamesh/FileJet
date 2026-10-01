@@ -1,0 +1,41 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Dashboard{% endblock %}
+{% block titlebar %}Dashboard{% endblock %}
+{% block content %}
+<h1>Welcome, {{ user.label }}</h1>
+<div class="stats">
+  <div class="stat"><div class="label">Files transferred</div><div class="value ok" id="s-completed">-</div></div>
+  <div class="stat"><div class="label">Active now</div><div class="value info" id="s-active">-</div></div>
+  <div class="stat"><div class="label">Failed</div><div class="value bad" id="s-failed">-</div></div>
+  <div class="stat"><div class="label">Sent (30 days)</div><div class="value" id="s-sent">-</div></div>
+  <div class="stat"><div class="label">Received (30 days)</div><div class="value" id="s-recv">-</div></div>
+  <div class="stat"><div class="label">Quota used</div><div class="value" id="s-quota">-</div></div>
+</div>
+
+<h2>Live transfers</h2>
+<div class="table-wrap" id="live"></div>
+
+<h2>Recent transfers <a href="{% url 'transfers' %}" style="text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px">View all</a></h2>
+<div class="table-wrap" id="recent"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+P2P.live(async () => {
+  const [stats, live, recent] = await Promise.all([
+    P2P.fetchJSON("/api/transfers/stats/"),
+    P2P.fetchJSON("/api/transfers/?active=1&page_size=50"),
+    P2P.fetchJSON("/api/transfers/?page_size=10"),
+  ]);
+  document.getElementById("s-completed").textContent = stats.completed;
+  document.getElementById("s-active").textContent = stats.active;
+  document.getElementById("s-failed").textContent = stats.failed;
+  document.getElementById("s-sent").textContent = P2P.bytes(stats.sent_30d);
+  document.getElementById("s-recv").textContent = P2P.bytes(stats.received_30d);
+  const u = stats.usage;
+  document.getElementById("s-quota").textContent = u.quota_bytes ? `${P2P.bytes(u.used_bytes)} / ${P2P.bytes(u.quota_bytes)}` : `${P2P.bytes(u.used_bytes)} / unlimited`;
+  P2P.table(document.getElementById("live"), live.results, "No transfer is running right now.");
+  P2P.table(document.getElementById("recent"), recent.results, "No transfers yet. Sign in to the Sender or Receiver app to start one.");
+});
+</script>
+{% endblock %}

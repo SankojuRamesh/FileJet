@@ -1,0 +1,43 @@
+{% load static cloud_ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} · MediaRush</title>
+  <link rel="stylesheet" href="{% static 'cloud/style.css' %}">
+</head>
+<body>
+<div class="shell">
+  <nav class="activity" aria-label="Main">
+    <a href="{% url 'dashboard' %}" class="{% if active == 'dashboard' %}active{% endif %}" aria-label="Dashboard">{% icon "dashboard" %}<span class="tip">Dashboard</span></a>
+    <a href="{% url 'transfers' %}" class="{% if active == 'transfers' %}active{% endif %}" aria-label="Transfers">{% icon "transfers" %}<span class="tip">Transfers</span></a>
+    <a href="{% url 'folders' %}" class="{% if active == 'folders' %}active{% endif %}" aria-label="Folders">{% icon "folder" %}<span class="tip">Folders &amp; permissions</span></a>
+    <a href="{% url 'users' %}" class="{% if active == 'users' %}active{% endif %}" aria-label="Users">{% icon "users" %}<span class="tip">Users</span></a>
+    {% if show_outbox %}<a href="{% url 'inbox' %}" class="{% if active == 'inbox' %}active{% endif %}" aria-label="Inbox">{% icon "mail" %}<span class="tip">Inbox (development)</span></a>{% endif %}
+    <a href="{% url 'devices' %}" class="{% if active == 'devices' %}active{% endif %}" aria-label="Devices">{% icon "devices" %}<span class="tip">Devices</span></a>
+    <a href="{% url 'subscription' %}" class="{% if active == 'subscription' %}active{% endif %}" aria-label="Subscription">{% icon "subscription" %}<span class="tip">Subscription</span></a>
+    <div class="spacer"></div>
+    <a href="{% url 'account' %}" class="{% if active == 'account' %}active{% endif %}" aria-label="Account">{% icon "account" %}<span class="tip">Account</span></a>
+    <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}
+      <a href="#" onclick="this.closest('form').submit();return false;" aria-label="Log out">{% icon "logout" %}<span class="tip">Log out</span></a>
+    </form>
+  </nav>
+  <main class="main">
+    <div class="titlebar">{% block titlebar %}{% endblock %}<span class="grow"></span><span>{{ user.label }}</span></div>
+    <div class="content">
+      {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+  <footer class="statusbar">
+    <span>{% icon "shield" 14 %} Metadata only: files never leave the users' computers</span>
+    <span class="grow"></span>
+    <span class="hide-sm">ID {{ user.formatted_id }}</span>
+    <span class="hide-sm">{{ user.subscription.plan.name|default:"Free" }} plan</span>
+    <span id="live-indicator">live</span>
+  </footer>
+</div>
+<script src="{% static 'cloud/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

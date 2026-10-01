@@ -1,0 +1,12 @@
+[
+  {
+    "size": 536870912,
+    "streams": 4,
+    "chunk": 8388608,
+    "state": "completed",
+    "seconds": 2.85,
+    "avg_MBps": 188.1,
+    "peak_MBps": 0.0,
+    "connection": null
+  }
+]

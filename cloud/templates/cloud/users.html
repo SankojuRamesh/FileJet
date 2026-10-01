@@ -1,0 +1,34 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Users{% endblock %}
+{% block titlebar %}Users{% endblock %}
+{% block content %}
+<h1>Users</h1>
+<div class="card">
+  <p style="margin-top:0">Your ID: <strong class="mono" style="font-size:15px">{{ user.formatted_id }}</strong></p>
+    <form method="post" class="toolbar">{% csrf_token %}
+    <input name="query" placeholder="User ID, username or e-mail" required style="width:280px" aria-label="User">
+    <input name="note" placeholder="Note, e.g. Editor - Marketing" style="width:240px" aria-label="Note">
+    <button class="btn" type="submit">{% icon "plus" 14 %} Add user</button>
+  </form>
+</div>
+
+<h2>My users ({{ clients|length }})</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Name</th><th>Username</th><th>E-mail</th><th>ID</th><th>Note</th><th>Added</th><th></th></tr></thead>
+  <tbody>{% for l in clients %}
+    <tr><td><span class="user"><span class="avatar">{{ l.client.label|slice:":1"|upper }}</span>{{ l.client.label }}</span></td>
+      <td>@{{ l.client.username }}</td><td>{{ l.client.email }}</td><td class="mono">{{ l.client.formatted_id }}</td>
+      <td>{{ l.note|default:"-" }}</td><td>{{ l.created_at|date:"Y-m-d H:i" }}</td>
+      <td class="num"><form method="post" onsubmit="return confirm('Remove {{ l.client.label|escapejs }}? They lose access to all your folders.')">{% csrf_token %}<input type="hidden" name="remove" value="{{ l.client.public_id }}"><button class="btn small danger">Remove</button></form></td></tr>
+  {% empty %}<tr><td colspan="7" class="empty">You have not added any users.</td></tr>{% endfor %}
+  </tbody></table></div>
+
+<h2>Admins who added me ({{ admins|length }})</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Admin</th><th>Username</th><th>Added</th></tr></thead>
+  <tbody>{% for l in admins %}
+    <tr><td>{{ l.admin.label }}</td><td>@{{ l.admin.username }}</td><td>{{ l.created_at|date:"Y-m-d H:i" }}</td></tr>
+  {% empty %}<tr><td colspan="3" class="empty">No admin has added you yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}

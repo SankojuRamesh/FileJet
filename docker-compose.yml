@@ -1,0 +1,76 @@
+# MediaRush server side (the desktop app runs on the users' PCs; files go directly PC-to-PC):
+#
+#   caddy      :443   https://$P2P_DOMAIN/        -> cloud (Django web dashboard + REST API)
+#                     wss://$P2P_DOMAIN/ws        -> signaling (connection setup)
+#                     wss://$P2P_DOMAIN/ws/presence -> presence (online status, encrypted contact messages)
+#   signaling  :8766  raw TCP reflector for hole punching (must NOT be proxied)
+#   db                PostgreSQL for the cloud app (metadata only)
+#
+#   cp .env.example .env    # fill in the secrets
+#   docker compose up -d --build
+#   docker compose exec cloud python manage.py createsuperuser
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mediarush
+      POSTGRES_USER: mediarush
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  cloud:
+    build: ./cloud
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${P2P_DOMAIN}
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${P2P_DOMAIN}
+      DATABASE_URL: postgres://mediarush:${POSTGRES_PASSWORD}@db:5432/mediarush
+      P2P_CLOUD_JWT_SECRET: ${P2P_CLOUD_JWT_SECRET}
+      P2P_SIGNALING_URL: wss://${P2P_DOMAIN}/ws
+      CLOUD_PUBLIC_URL: https://${P2P_DOMAIN}/
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-dummy}
+      # real e-mail (invitations with the folder ID, upload notifications)
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-1}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-MediaRush <no-reply@example.com>}
+    expose: ["8000"]
+
+  signaling:
+    build: .
+    restart: unless-stopped
+    environment:
+      P2P_HOST: 0.0.0.0
+      P2P_PORT: "8765"
+      P2P_REFLECTOR_PORT: "8766"
+      P2P_PUBLIC_HOST: ${P2P_DOMAIN}
+      P2P_CLOUD_JWT_SECRET: ${P2P_CLOUD_JWT_SECRET}   # only signed-in users of the cloud can connect
+      P2P_TRUST_PROXY: "1"
+    ports:
+      - "8766:8766"
+    expose: ["8765"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [cloud, signaling]
+    environment:
+      P2P_DOMAIN: ${P2P_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  db_data:
+  caddy_data:

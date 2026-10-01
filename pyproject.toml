@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mediarush"
+version = "2.0.0"
+description = "MediaRush: fast direct file and folder transfer between computers"
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.6", "cryptography>=42", "websockets>=13", "PyJWT>=2.8", "psutil>=5.9"]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+cloud = ["Django>=5.1", "djangorestframework>=3.15", "djangorestframework-simplejwt>=5.3", "whitenoise>=6.6"]
+dev = ["pytest>=8", "httpx>=0.27", "fastapi>=0.110", "uvicorn[standard]>=0.29"]
+build = ["pyinstaller>=6"]
+
+[project.scripts]
+p2p-signaling = "server.main:main"
+
+[project.gui-scripts]
+mediarush = "client.gui.app:main"
+
+[tool.setuptools]
+packages = ["client", "client.gui", "server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

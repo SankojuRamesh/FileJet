@@ -1,0 +1,9 @@
+Django>=5.1
+djangorestframework>=3.15
+djangorestframework-simplejwt>=5.3
+PyJWT>=2.8
+cryptography>=42
+whitenoise>=6.6
+waitress>=3.0          # server without Docker (Windows + Linux)
+gunicorn>=22
+psycopg[binary]>=3.1

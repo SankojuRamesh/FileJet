@@ -1,0 +1,47 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Transfers{% endblock %}
+{% block titlebar %}Transfers{% endblock %}
+{% block content %}
+<h1>Transfer history</h1>
+<div class="toolbar">
+  <div class="search">{% icon "search" 14 %}<input id="q" type="search" placeholder="Search file, user, share…" aria-label="Search"></div>
+  <select id="status" aria-label="Status">
+    <option value="">All statuses</option><option value="active">Active</option><option value="completed">Completed</option>
+    <option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="paused">Paused</option>
+  </select>
+  <select id="role" aria-label="Direction">
+    <option value="">Sent and received</option><option value="sent">Sent by me</option><option value="received">Received by me</option>
+  </select>
+  <span class="grow"></span>
+  <span class="muted" id="count"></span>
+  <button class="btn secondary small" id="prev" type="button">Previous</button>
+  <button class="btn secondary small" id="next" type="button">Next</button>
+</div>
+<div class="table-wrap" id="table"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+let page = 1, lastCount = 0;
+const $ = (id) => document.getElementById(id);
+async function load() {
+  const p = new URLSearchParams({ page, page_size: 25 });
+  if ($("q").value) p.set("q", $("q").value);
+  if ($("status").value) p.set("status", $("status").value);
+  if ($("role").value) p.set("role", $("role").value);
+  let data;
+  try { data = await P2P.fetchJSON(`/api/transfers/?${p}`); }
+  catch (e) { if (page > 1) { page = 1; return load(); } throw e; }
+  lastCount = data.count;
+  $("count").textContent = `${data.count} transfer${data.count === 1 ? "" : "s"} · page ${page}`;
+  $("prev").disabled = !data.previous; $("next").disabled = !data.next;
+  P2P.table($("table"), data.results, "No transfers match.");
+}
+let t;
+$("q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { page = 1; load(); }, 300); });
+["status", "role"].forEach((id) => $(id).addEventListener("change", () => { page = 1; load(); }));
+$("prev").addEventListener("click", () => { if (page > 1) { page--; load(); } });
+$("next").addEventListener("click", () => { page++; load(); });
+P2P.live(load);
+</script>
+{% endblock %}

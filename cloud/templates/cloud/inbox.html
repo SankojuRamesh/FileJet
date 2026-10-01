@@ -1,0 +1,18 @@
+{% extends "cloud/base.html" %}
+{% block title %}Inbox{% endblock %}
+{% block titlebar %}Inbox (development){% endblock %}
+{% block content %}
+<h1>Inbox</h1>
+<p class="muted">Development helper: e-mails the cloud sent to <strong>{{ user.email }}</strong>. In production real e-mail is
+sent by SMTP and this page is disabled (<code>SHOW_EMAIL_OUTBOX=0</code>).</p>
+{% for m in mails %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:6px"><strong style="color:var(--text-strong)">{{ m.subject }}</strong>
+    <span class="grow"></span><span class="muted">{{ m.created_at|date:"Y-m-d H:i" }}</span>
+    {% if not m.delivered %}<span class="pill failed" title="{{ m.error }}">not delivered</span>{% endif %}</div>
+  <pre style="white-space:pre-wrap;margin:0;font-family:Consolas,monospace;font-size:13px;color:var(--text)">{{ m.body }}</pre>
+</div>
+{% empty %}
+<div class="card muted">No e-mails yet.</div>
+{% endfor %}
+{% endblock %}

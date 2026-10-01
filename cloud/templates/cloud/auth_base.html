@@ -1,0 +1,17 @@
+{% load static cloud_ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sign in{% endblock %} · MediaRush</title>
+  <link rel="stylesheet" href="{% static 'cloud/style.css' %}">
+</head>
+<body>
+<div class="auth">
+  <div class="card">
+    <h1><span class="brand">{% icon "transfers" 26 %}</span> MediaRush</h1>
+    {% block content %}{% endblock %}
+  </div>
+</div>
+</body>
+</html>

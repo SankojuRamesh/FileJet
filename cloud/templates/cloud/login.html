@@ -1,0 +1,14 @@
+{% extends "cloud/auth_base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<form method="post">{% csrf_token %}
+  {% if form.non_field_errors %}<ul class="errorlist">{% for e in form.non_field_errors %}<li>Wrong username/e-mail or password.</li>{% endfor %}</ul>{% endif %}
+  <label for="id_username">Username or e-mail</label>
+  <input id="id_username" name="username" autocomplete="username" required autofocus value="{{ form.username.value|default:'' }}">
+  <label for="id_password">Password</label>
+  <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="btn" type="submit">Sign in</button>
+</form>
+<p class="alt">No account? <a href="{% url 'register' %}">Create one</a></p>
+{% endblock %}

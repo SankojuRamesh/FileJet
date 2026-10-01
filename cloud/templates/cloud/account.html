@@ -1,0 +1,25 @@
+{% extends "cloud/base.html" %}
+{% block title %}Account{% endblock %}
+{% block titlebar %}Account{% endblock %}
+{% block content %}
+<h1>Account</h1>
+<div class="row">
+  <div class="card">
+    <h2 style="margin-top:0">Profile</h2>
+    <p>Username <strong>{{ user.username }}</strong> · ID <strong class="mono">{{ user.formatted_id }}</strong> · member since {{ user.date_joined|date:"Y-m-d" }}</p>
+    <form method="post" class="form-row">{% csrf_token %}<input type="hidden" name="form" value="profile">
+      {{ profile.non_field_errors }}
+      {% for field in profile %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% endfor %}
+      <button class="btn" style="margin-top:14px">Save profile</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Change password</h2>
+    <form method="post" class="form-row">{% csrf_token %}<input type="hidden" name="form" value="password">
+      {{ pw.non_field_errors }}
+      {% for field in pw %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% endfor %}
+      <button class="btn" style="margin-top:14px">Change password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
