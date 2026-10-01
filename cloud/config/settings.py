@@ -27,15 +27,15 @@ if not DEBUG and SECRET_KEY.startswith("dev-insecure"):
 # Public domain of this deployment. Production defaults below are derived from it; every value can still be
 # overridden by its own environment variable. Development (DJANGO_DEBUG=1) keeps using 127.0.0.1.
 DOMAIN = os.environ.get("P2P_DOMAIN", "iotgateway.live")
-# Served over HTTPS? Set DJANGO_HTTPS=0 only while the site has no certificate yet (or for a plain-HTTP office
-# network): web sign-in cookies must then be allowed over HTTP.
-HTTPS = os.environ.get("DJANGO_HTTPS", "0" if DEBUG else "1") == "1"
+# Served over HTTPS? Default: plain HTTP (http://DOMAIN/, ws://DOMAIN/ws). Set DJANGO_HTTPS=1 if a certificate
+# is added later - then secure cookies, HSTS and https/wss URLs are used.
+HTTPS = os.environ.get("DJANGO_HTTPS", "0") == "1"          # this deployment runs on plain HTTP
 _SCHEME, _WS = ("https", "wss") if HTTPS else ("http", "ws")
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS",
                          f"{DOMAIN},www.{DOMAIN},13.204.80.52,localhost,127.0.0.1,testserver,*")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS",
-                                "" if DEBUG else f"https://{DOMAIN},https://www.{DOMAIN},http://{DOMAIN}")
+                                "" if DEBUG else f"http://{DOMAIN},http://www.{DOMAIN},https://{DOMAIN}")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

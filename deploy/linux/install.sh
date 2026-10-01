@@ -3,9 +3,8 @@
 #
 #   sudo bash deploy/linux/install.sh                                  # office network, plain HTTP (auto IP)
 #   sudo bash deploy/linux/install.sh --address 192.168.1.20
-#   sudo bash deploy/linux/install.sh --domain iotgateway.live        # internet, HTTPS (nginx+certbot if nginx is
-#                                                                     #   installed, otherwise Caddy)
-#   CERT_EMAIL=you@example.com sudo -E bash deploy/linux/install.sh --domain iotgateway.live   # with renewal e-mails
+#   sudo bash deploy/linux/install.sh --domain iotgateway.live        # internet, plain HTTP via nginx (or Caddy)
+#   sudo bash deploy/linux/install.sh --domain iotgateway.live --https   # optional: HTTPS certificate (certbot)
 #
 # What it does: copies the server to /opt/mediarush, creates a venv, writes server.env with random secrets
 # (kept on re-run), prepares the database (SQLite in /opt/mediarush/data), installs the systemd service
@@ -19,6 +18,7 @@ DOMAIN=""
 CLOUD_PORT=8000
 SIGNAL_PORT=8765
 REFLECTOR_PORT=8766
+WANT_HTTPS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) INSTALL_DIR="$2"; shift 2 ;;
@@ -27,6 +27,7 @@ while [ $# -gt 0 ]; do
     --cloud-port) CLOUD_PORT="$2"; shift 2 ;;
     --signal-port) SIGNAL_PORT="$2"; shift 2 ;;
     --reflector-port) REFLECTOR_PORT="$2"; shift 2 ;;
+    --https) WANT_HTTPS=1; shift ;;
     *) echo "unknown option $1"; exit 1 ;;
   esac
 done
@@ -56,7 +57,7 @@ step "Creating the Python environment"
 
 if [ -z "$ADDRESS" ]; then ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"; fi
 if [ -n "$DOMAIN" ]; then
-  CLOUD_URL="https://$DOMAIN/"; SIGNAL_URL="wss://$DOMAIN/ws"; HOSTS="$DOMAIN,localhost,127.0.0.1"; HTTPS=1
+  CLOUD_URL="http://$DOMAIN/"; SIGNAL_URL="ws://$DOMAIN/ws"; HOSTS="$DOMAIN,www.$DOMAIN,localhost,127.0.0.1"; HTTPS=0
   CLOUD_HOST=127.0.0.1; PUBLIC_HOST="$DOMAIN"; TRUST=1
 else
   CLOUD_URL="http://$ADDRESS:$CLOUD_PORT/"; SIGNAL_URL="ws://$ADDRESS:$SIGNAL_PORT/ws"
@@ -131,7 +132,7 @@ systemctl restart mediarush
 
 if command -v ufw >/dev/null && ufw status | grep -q active; then
   step "Opening the firewall (ufw)"
-  if [ -n "$DOMAIN" ]; then ufw allow 80,443,"$REFLECTOR_PORT"/tcp; else ufw allow "$CLOUD_PORT","$SIGNAL_PORT","$REFLECTOR_PORT"/tcp; fi
+  if [ -n "$DOMAIN" ]; then ufw allow 80,"$REFLECTOR_PORT"/tcp; [ "$WANT_HTTPS" = 1 ] && ufw allow 443/tcp; else ufw allow "$CLOUD_PORT","$SIGNAL_PORT","$REFLECTOR_PORT"/tcp; fi
 fi
 
 set_env() {   # set_env KEY VALUE  -> update server.env
@@ -154,8 +155,12 @@ if [ -n "$DOMAIN" ] && command -v nginx >/dev/null; then
       > /etc/nginx/sites-available/mediarush
   ln -sf /etc/nginx/sites-available/mediarush /etc/nginx/sites-enabled/mediarush
   nginx -t && systemctl reload nginx
-  if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 'Nginx Full' >/dev/null || true; fi
+  if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 'Nginx HTTP' >/dev/null || true; fi
+  set_env DJANGO_HTTPS 0
+  set_env CLOUD_PUBLIC_URL "http://$DOMAIN/"
+  set_env P2P_SIGNALING_URL "ws://$DOMAIN/ws"
 
+  if [ "$WANT_HTTPS" = 1 ]; then
   step "HTTPS certificate (Let's Encrypt)"
   if command -v apt-get >/dev/null && ! command -v certbot >/dev/null; then
     apt-get install -y -qq certbot python3-certbot-nginx >/dev/null
@@ -176,18 +181,20 @@ if [ -n "$DOMAIN" ] && command -v nginx >/dev/null; then
     set_env P2P_SIGNALING_URL "ws://$DOMAIN/ws"
     CLOUD_URL="http://$DOMAIN/"
   fi
+  fi
   systemctl restart mediarush
 
 elif [ -n "$DOMAIN" ]; then
-  step "HTTPS with Caddy for $DOMAIN"
+  step "Caddy reverse proxy for $DOMAIN"
   if ! command -v caddy >/dev/null && command -v apt-get >/dev/null; then
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gnupg >/dev/null
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -qq && apt-get install -y -qq caddy >/dev/null
   fi
+  SITE="http://$DOMAIN"; [ "$WANT_HTTPS" = 1 ] && SITE="$DOMAIN"
   cat > /etc/caddy/Caddyfile <<EOF
-$DOMAIN {
+$SITE {
 	encode zstd gzip
 	reverse_proxy /ws 127.0.0.1:$SIGNAL_PORT
 	reverse_proxy /ws/presence 127.0.0.1:$SIGNAL_PORT

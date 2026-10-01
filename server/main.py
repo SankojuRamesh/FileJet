@@ -1,6 +1,7 @@
 """Signaling server: rendezvous + presence + TCP reflector. Never carries file data.
 
-    P2P_CLOUD_JWT_SECRET=<same as the cloud> python -m server.main
+    P2P_CLOUD_JWT_SECRET=<same as the cloud> python -m server.main     (from the project folder)
+    P2P_CLOUD_JWT_SECRET=<same as the cloud> python main.py            (from inside server/ also works)
 """
 from __future__ import annotations
 
@@ -9,6 +10,11 @@ import asyncio
 import contextlib
 import logging
 import sys
+
+if __name__ == "__main__" and not __package__:     # started as "python main.py" inside server/
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    __package__ = "server"                          # noqa: A001 - lets the relative imports below work
 
 from fastapi import FastAPI, WebSocket
 
@@ -61,6 +67,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+ENV_FILE = __import__("pathlib").Path(__file__).resolve().parent.parent / "server.env"
+
+
+def load_env_file(path) -> None:
+    """KEY=VALUE lines (# comments). Values already in the environment win."""
+    import os
+    from pathlib import Path
+    f = Path(path)
+    if not f.is_file():
+        return
+    for raw in f.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+    logging.getLogger("p2p.server").info("settings loaded from %s", f)
+
+
 def main(argv=None) -> None:
     import uvicorn
 
@@ -69,12 +93,18 @@ def main(argv=None) -> None:
     parser.add_argument("--port", type=int)
     parser.add_argument("--reflector-port", type=int)
     parser.add_argument("--log-level", default="info")
+    parser.add_argument("--env", default=str(ENV_FILE),
+                        help="settings file with P2P_CLOUD_JWT_SECRET=... (default: server.env in the project folder)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=args.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    load_env_file(args.env)
     settings = load_settings()
     if not settings.cloud_jwt_secret:
-        sys.exit("P2P_CLOUD_JWT_SECRET is not set. Use the same value as the cloud app "
-                 "(or start everything with: python run_dev.py).")
+        sys.exit("P2P_CLOUD_JWT_SECRET is not set - it must be the same value as the cloud app (Django).\n"
+                 f"  Put this line into {args.env}:\n"
+                 "      P2P_CLOUD_JWT_SECRET=<same value as the cloud app>\n"
+                 "  or set it in this window first:  $env:P2P_CLOUD_JWT_SECRET = \"...\"\n"
+                 "  or start cloud + signaling together:  python run_dev.py")
     if args.host:
         settings.host = args.host
     if args.port:

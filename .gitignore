@@ -9,3 +9,5 @@ dist/
 *.part
 cloud/db.sqlite3
 cloud/staticfiles/
+client/build_info.py
+server.env

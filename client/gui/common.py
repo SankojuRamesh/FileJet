@@ -174,7 +174,12 @@ def default_data_dir(app: str) -> Path:
     return old if old.exists() else Path.home() / ".mediarush" / app
 
 
-DEFAULT_CLOUD_URL = "https://iotgateway.live/"      # MediaRush cloud (change with "Change" on the sign-in screen)
+try:                                   # written by build_desktop.py --cloud-url ...
+    from ..build_info import CLOUD_URL as DEFAULT_CLOUD_URL
+except ImportError:
+    DEFAULT_CLOUD_URL = "http://iotgateway.live/"   # MediaRush cloud (change with "Change" on the sign-in screen)
+# addresses older builds saved as their default - an installed app moves to DEFAULT_CLOUD_URL
+_OLD_DEFAULTS = ("http://127.0.0.1:8000/", "http://localhost:8000/", "https://iotgateway.live/")
 
 
 def load_settings(data_dir: Path) -> dict:
@@ -187,6 +192,8 @@ def load_settings(data_dir: Path) -> dict:
                   if k in SETTINGS_KEYS})
     except (OSError, ValueError):
         pass
+    if getattr(sys, "frozen", False) and s.get("cloud_url") in _OLD_DEFAULTS and "P2P_CLOUD_URL" not in os.environ:
+        s["cloud_url"] = DEFAULT_CLOUD_URL
     return s
 
 

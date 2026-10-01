@@ -242,7 +242,7 @@ powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotg
 ```bash
 # Linux server (Ubuntu/Debian)
 sudo bash deploy/linux/install.sh                                   # office network
-sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, HTTPS via Caddy
+sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, http://iotgateway.live/
 ```
 
 **With Docker (optional).**
@@ -250,9 +250,9 @@ sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, HTTPS
 cp .env.example .env && docker compose up -d --build
 ```
 
-* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `https://iotgateway.live/`)
+* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `http://iotgateway.live/`)
   via **Change** on the sign-in screen.
-* Ports to open: office network TCP 8000, 8765 and 8766; internet TCP 80, 443 and 8766.
+* Ports to open: office network TCP 8000, 8765 and 8766; domain TCP 80 and 8766.
 
 Main REST endpoints:
 

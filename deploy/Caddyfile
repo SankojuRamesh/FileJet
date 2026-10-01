@@ -1,5 +1,5 @@
-# TLS termination (certificates are obtained automatically).
-{$P2P_DOMAIN} {
+# Reverse proxy, plain HTTP (http://DOMAIN). For HTTPS remove the "http://" prefix (certificate is automatic).
+http://{$P2P_DOMAIN} {
 	encode zstd gzip
 	# WebSockets: connection setup and presence (signaling server)
 	reverse_proxy /ws signaling:8765

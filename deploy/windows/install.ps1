@@ -16,7 +16,7 @@
     4. prepares the database (SQLite in <InstallDir>\data)
     5. registers the "MediaRush Server" task: starts at boot, restarts on failure
     6. opens the Windows Firewall ports
-    7. -Domain only: writes a Caddyfile for HTTPS and, if caddy.exe is installed, starts it as a task
+    7. -Domain only: writes a Caddyfile (plain HTTP; -Https for a certificate) and starts Caddy if installed
 
   Re-running it updates the files and keeps server.env and the database.
 #>
@@ -27,6 +27,7 @@ param(
     [int]$CloudPort = 8000,
     [int]$SignalPort = 8765,
     [int]$ReflectorPort = 8766,
+    [switch]$Https,                 # with -Domain: get an HTTPS certificate (default: plain HTTP)
     [switch]$SkipService,
     [switch]$SkipFirewall
 )
@@ -84,7 +85,9 @@ if (-not $Address) {
     if (-not $Address) { $Address = $env:COMPUTERNAME }
 }
 if ($Domain) {
-    $cloudUrl = "https://$Domain/"; $signalUrl = "wss://$Domain/ws"; $hosts = "$Domain,localhost,127.0.0.1"; $https = "1"; $cloudHost = "127.0.0.1"
+    if ($Https) { $cloudUrl = "https://$Domain/"; $signalUrl = "wss://$Domain/ws"; $https = "1" }
+    else { $cloudUrl = "http://$Domain/"; $signalUrl = "ws://$Domain/ws"; $https = "0" }
+    $hosts = "$Domain,www.$Domain,localhost,127.0.0.1"; $cloudHost = "127.0.0.1"
 } else {
     $cloudUrl = "http://${Address}:$CloudPort/"; $signalUrl = "ws://${Address}:$SignalPort/ws"; $hosts = "$Address,$env:COMPUTERNAME,localhost,127.0.0.1"; $https = "0"; $cloudHost = "0.0.0.0"
 }
@@ -154,17 +157,18 @@ if (-not $SkipService) {
 if (-not $SkipFirewall) {
     Step "Opening Windows Firewall ports"
     Get-NetFirewallRule -DisplayName "MediaRush *" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-    if ($Domain) { $ports = @(80, 443, $ReflectorPort) } else { $ports = @($CloudPort, $SignalPort, $ReflectorPort) }
+    if ($Domain -and $Https) { $ports = @(80, 443, $ReflectorPort) } elseif ($Domain) { $ports = @(80, $ReflectorPort) } else { $ports = @($CloudPort, $SignalPort, $ReflectorPort) }
     New-NetFirewallRule -DisplayName "MediaRush Server" -Direction Inbound -Protocol TCP -LocalPort $ports -Action Allow | Out-Null
     Write-Host ("Allowed inbound TCP " + ($ports -join ", "))
 }
 
 # ---------------------------------------------------------------- 8. HTTPS (domain only)
 if ($Domain) {
-    Step "HTTPS for $Domain"
+    Step "Web proxy (Caddy) for $Domain"
     $caddyfile = Join-Path $InstallDir "Caddyfile"
+    if ($Https) { $site = $Domain } else { $site = "http://$Domain" }
     Set-Content -Path $caddyfile -Encoding ascii -Value @"
-$Domain {
+$site {
 	encode zstd gzip
 	reverse_proxy /ws 127.0.0.1:$SignalPort
 	reverse_proxy /ws/presence 127.0.0.1:$SignalPort
@@ -180,9 +184,9 @@ $Domain {
         Register-ScheduledTask -TaskName "MediaRush HTTPS" -Action $a -Trigger (New-ScheduledTaskTrigger -AtStartup) `
             -Settings $settings -Principal $principal | Out-Null
         Start-ScheduledTask -TaskName "MediaRush HTTPS"
-        Write-Host "Caddy started (certificate is obtained automatically; DNS for $Domain must point to this server)."
+        Write-Host "Caddy started for $site (DNS for $Domain must point to this server)."
     } else {
-        Write-Host "Install Caddy for HTTPS, then re-run this script:  winget install CaddyServer.Caddy" -ForegroundColor Yellow
+        Write-Host "Install Caddy (web proxy), then re-run this script:  winget install CaddyServer.Caddy" -ForegroundColor Yellow
         Write-Host "  (or put caddy.exe from https://caddyserver.com/download into $InstallDir)"
     }
 }

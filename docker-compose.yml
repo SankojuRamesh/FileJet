@@ -1,8 +1,8 @@
 # MediaRush server side (the desktop app runs on the users' PCs; files go directly PC-to-PC):
 #
-#   caddy      :443   https://$P2P_DOMAIN/        -> cloud (Django web dashboard + REST API)
-#                     wss://$P2P_DOMAIN/ws        -> signaling (connection setup)
-#                     wss://$P2P_DOMAIN/ws/presence -> presence (online status, encrypted contact messages)
+#   caddy      :80    http://$P2P_DOMAIN/         -> cloud (Django web dashboard + REST API)
+#                     ws://$P2P_DOMAIN/ws         -> signaling (connection setup)
+#                     ws://$P2P_DOMAIN/ws/presence -> presence (online status, encrypted contact messages)
 #   signaling  :8766  raw TCP reflector for hole punching (must NOT be proxied)
 #   db                PostgreSQL for the cloud app (metadata only)
 #
@@ -28,11 +28,12 @@ services:
       DJANGO_DEBUG: "0"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       DJANGO_ALLOWED_HOSTS: ${P2P_DOMAIN}
-      DJANGO_CSRF_TRUSTED_ORIGINS: https://${P2P_DOMAIN}
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://${P2P_DOMAIN}
+      DJANGO_HTTPS: "0"
       DATABASE_URL: postgres://mediarush:${POSTGRES_PASSWORD}@db:5432/mediarush
       P2P_CLOUD_JWT_SECRET: ${P2P_CLOUD_JWT_SECRET}
-      P2P_SIGNALING_URL: wss://${P2P_DOMAIN}/ws
-      CLOUD_PUBLIC_URL: https://${P2P_DOMAIN}/
+      P2P_SIGNALING_URL: ws://${P2P_DOMAIN}/ws
+      CLOUD_PUBLIC_URL: http://${P2P_DOMAIN}/
       BILLING_PROVIDER: ${BILLING_PROVIDER:-dummy}
       # real e-mail (invitations with the folder ID, upload notifications)
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
