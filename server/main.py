@@ -88,7 +88,7 @@ def load_env_file(path) -> None:
 def main(argv=None) -> None:
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="MediaRush signaling server (no file data)")
+    parser = argparse.ArgumentParser(description="FileJet signaling server (no file data)")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     parser.add_argument("--reflector-port", type=int)

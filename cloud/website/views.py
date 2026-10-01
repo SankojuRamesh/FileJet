@@ -1,7 +1,7 @@
 """Public website: home (landing page), features, pricing, download, about.
 
 Prices come from the plans in the database (billing.Plan), so the website and the app's subscription
-page always agree. Downloads are served from DOWNLOADS_DIR (put MediaRush.exe / the .deb there).
+page always agree. Downloads are served from DOWNLOADS_DIR (put FileJet.exe / the .deb there).
 """
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ GB, TB = 10 ** 9, 10 ** 12
 
 # files offered on the download page: (file name pattern, platform, label)
 DOWNLOADS = [
-    ("MediaRush.exe", "windows", "Windows 10 / 11", "Installer-free app – just run it"),
-    ("mediarush_*_amd64.deb", "linux", "Ubuntu / Debian (.deb)", "sudo apt install ./mediarush_…deb"),
-    ("MediaRush-linux-x86_64.tar.gz", "linux", "Linux (.tar.gz)", "Any x86-64 Linux desktop"),
+    ("FileJet.exe", "windows", "Windows 10 / 11", "Installer-free app – just run it"),
+    ("filejet_*_amd64.deb", "linux", "Ubuntu / Debian (.deb)", "sudo apt install ./filejet_…deb"),
+    ("FileJet-linux-x86_64.tar.gz", "linux", "Linux (.tar.gz)", "Any x86-64 Linux desktop"),
 ]
 
 

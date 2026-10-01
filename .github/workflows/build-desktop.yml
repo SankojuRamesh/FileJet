@@ -1,4 +1,4 @@
-# Builds the MediaRush desktop app for Windows and Linux (Ubuntu 22.04 = runs on 22.04 and newer).
+# Builds the FileJet desktop app for Windows and Linux (Ubuntu 22.04 = runs on 22.04 and newer).
 # Run it from GitHub: Actions -> "Build desktop app" -> Run workflow. Downloads: the run's "Artifacts".
 name: Build desktop app
 
@@ -26,8 +26,8 @@ jobs:
       - run: python build_desktop.py --cloud-url "${{ github.event.inputs.cloud_url || 'http://iotgateway.live/' }}" --signal-url "${{ github.event.inputs.signal_url || 'ws://13.204.80.52:8765/ws' }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: MediaRush-windows
-          path: dist/MediaRush.exe
+          name: FileJet-windows
+          path: dist/FileJet.exe
 
   linux:
     runs-on: ubuntu-22.04
@@ -36,7 +36,7 @@ jobs:
       - run: bash packaging/linux/build_linux.sh --cloud-url "${{ github.event.inputs.cloud_url || 'http://iotgateway.live/' }}" --signal-url "${{ github.event.inputs.signal_url || 'ws://13.204.80.52:8765/ws' }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: MediaRush-linux
+          name: FileJet-linux
           path: |
             dist/*.deb
             dist/*.tar.gz

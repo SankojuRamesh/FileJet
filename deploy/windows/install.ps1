@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Installs the MediaRush server (cloud + signaling) on Windows - no Docker.
+  Installs the FileJet server (cloud + signaling) on Windows - no Docker.
 
 .DESCRIPTION
   Run in an *Administrator* PowerShell from the project folder:
@@ -10,18 +10,18 @@
       powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
 
   What it does:
-    1. copies the server files to -InstallDir (default C:\MediaRush)
+    1. copies the server files to -InstallDir (default C:\FileJet)
     2. creates a Python virtual environment and installs the requirements
     3. writes server.env with random secrets (kept if it already exists)
     4. prepares the database (SQLite in <InstallDir>\data)
-    5. registers the "MediaRush Server" task: starts at boot, restarts on failure
+    5. registers the "FileJet Server" task: starts at boot, restarts on failure
     6. opens the Windows Firewall ports
     7. -Domain only: writes a Caddyfile (plain HTTP; -Https for a certificate) and starts Caddy if installed
 
   Re-running it updates the files and keeps server.env and the database.
 #>
 param(
-    [string]$InstallDir = "C:\MediaRush",
+    [string]$InstallDir = "C:\FileJet",
     [string]$Address = "",          # IP or host name users connect to (office network, plain HTTP)
     [string]$Domain = "",           # public domain name -> HTTPS via Caddy
     [int]$CloudPort = 8000,
@@ -96,7 +96,7 @@ if (Test-Path $envFile) {
 } else {
     Step "Writing settings: $envFile"
     $content = @"
-# MediaRush server settings (written by install.ps1). Restart the "MediaRush Server" task after changes.
+# FileJet server settings (written by install.ps1). Restart the "FileJet Server" task after changes.
 DJANGO_SECRET_KEY=$(NewSecret)
 P2P_CLOUD_JWT_SECRET=$(NewSecret)
 DJANGO_ALLOWED_HOSTS=$hosts
@@ -124,7 +124,7 @@ SHOW_EMAIL_OUTBOX=1
 # EMAIL_HOST_USER=
 # EMAIL_HOST_PASSWORD=
 # EMAIL_USE_TLS=1
-# DEFAULT_FROM_EMAIL=MediaRush <no-reply@example.com>
+# DEFAULT_FROM_EMAIL=FileJet <no-reply@example.com>
 # SHOW_EMAIL_OUTBOX=0
 "@
     Set-Content -Path $envFile -Value $content -Encoding ascii
@@ -141,24 +141,24 @@ Set-Content -Path $runCmd -Encoding ascii -Value "@echo off`r`ncd /d `"$InstallD
 
 # ---------------------------------------------------------------- 6. service (scheduled task)
 if (-not $SkipService) {
-    Step "Registering the 'MediaRush Server' task (starts at boot, restarts on failure)"
+    Step "Registering the 'FileJet Server' task (starts at boot, restarts on failure)"
     $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$runCmd`""
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    Unregister-ScheduledTask -TaskName "MediaRush Server" -Confirm:$false -ErrorAction SilentlyContinue
-    Register-ScheduledTask -TaskName "MediaRush Server" -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
-    Stop-ScheduledTask -TaskName "MediaRush Server" -ErrorAction SilentlyContinue
-    Start-ScheduledTask -TaskName "MediaRush Server"
+    Unregister-ScheduledTask -TaskName "FileJet Server" -Confirm:$false -ErrorAction SilentlyContinue
+    Register-ScheduledTask -TaskName "FileJet Server" -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
+    Stop-ScheduledTask -TaskName "FileJet Server" -ErrorAction SilentlyContinue
+    Start-ScheduledTask -TaskName "FileJet Server"
 }
 
 # ---------------------------------------------------------------- 7. firewall
 if (-not $SkipFirewall) {
     Step "Opening Windows Firewall ports"
-    Get-NetFirewallRule -DisplayName "MediaRush *" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    Get-NetFirewallRule -DisplayName "FileJet *" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     if ($Domain -and $Https) { $ports = @(80, 443, $ReflectorPort) } elseif ($Domain) { $ports = @(80, $ReflectorPort) } else { $ports = @($CloudPort, $SignalPort, $ReflectorPort) }
-    New-NetFirewallRule -DisplayName "MediaRush Server" -Direction Inbound -Protocol TCP -LocalPort $ports -Action Allow | Out-Null
+    New-NetFirewallRule -DisplayName "FileJet Server" -Direction Inbound -Protocol TCP -LocalPort $ports -Action Allow | Out-Null
     Write-Host ("Allowed inbound TCP " + ($ports -join ", "))
 }
 
@@ -180,10 +180,10 @@ $site {
     if (-not $caddy -and (Test-Path "$InstallDir\caddy.exe")) { $caddy = "$InstallDir\caddy.exe" }
     if ($caddy -and -not $SkipService) {
         $a = New-ScheduledTaskAction -Execute $caddy -Argument "run --config `"$caddyfile`"" -WorkingDirectory $InstallDir
-        Unregister-ScheduledTask -TaskName "MediaRush HTTPS" -Confirm:$false -ErrorAction SilentlyContinue
-        Register-ScheduledTask -TaskName "MediaRush HTTPS" -Action $a -Trigger (New-ScheduledTaskTrigger -AtStartup) `
+        Unregister-ScheduledTask -TaskName "FileJet HTTPS" -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName "FileJet HTTPS" -Action $a -Trigger (New-ScheduledTaskTrigger -AtStartup) `
             -Settings $settings -Principal $principal | Out-Null
-        Start-ScheduledTask -TaskName "MediaRush HTTPS"
+        Start-ScheduledTask -TaskName "FileJet HTTPS"
         Write-Host "Caddy started for $site (DNS for $Domain must point to this server)."
     } else {
         Write-Host "Install Caddy (web proxy), then re-run this script:  winget install CaddyServer.Caddy" -ForegroundColor Yellow
@@ -193,7 +193,7 @@ $site {
 
 # ---------------------------------------------------------------- done
 Step "Done"
-Write-Host "Cloud URL for the MediaRush app:  $cloudUrl" -ForegroundColor Green
+Write-Host "Cloud URL for the FileJet app:  $cloudUrl" -ForegroundColor Green
 Write-Host "Web dashboard:                    $cloudUrl"
 Write-Host "Settings:                         $envFile"
 Write-Host "Log:                              $InstallDir\data\server.log"

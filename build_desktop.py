@@ -5,7 +5,7 @@
     python build_desktop.py --cloud-url http://192.168.1.20:8000/  # a build for another server
     python build_desktop.py --signal-url ""                        # signaling address: ask the cloud (automatic)
 
-Produces dist/MediaRush(.exe) with the cloud URL built in (users can still change it on the sign-in screen).
+Produces dist/FileJet(.exe) with the cloud URL built in (users can still change it on the sign-in screen).
 The cloud (Django) and the signaling server are server-side and are NOT bundled.
 """
 import argparse
@@ -40,7 +40,7 @@ def write_build_info(cloud_url: str, signal_url: str = "") -> None:
 
 
 def make_icon() -> Path | None:
-    """MediaRush logo as build/mediarush.ico (Windows exe) and build/mediarush.png (Linux app menu)."""
+    """FileJet logo as build/mediarush.ico (Windows exe) and build/mediarush.png (Linux app menu)."""
     try:
         sys.path.insert(0, str(ROOT))
         from PySide6.QtGui import QGuiApplication
@@ -58,7 +58,7 @@ def make_icon() -> Path | None:
     return None
 
 
-def build(name: str = "MediaRush", entry: str = "mediarush.py") -> None:
+def build(name: str = "FileJet", entry: str = "filejet.py") -> None:
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed", "--name", name,
            "--collect-submodules", "client"]
     icon = make_icon()
@@ -72,7 +72,7 @@ def build(name: str = "MediaRush", entry: str = "mediarush.py") -> None:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Build the MediaRush desktop app")
+    ap = argparse.ArgumentParser(description="Build the FileJet desktop app")
     ap.add_argument("--cloud-url", default=DEFAULT_CLOUD_URL, help=f"cloud the app uses by default ({DEFAULT_CLOUD_URL})")
     ap.add_argument("--signal-url", default=DEFAULT_SIGNAL_URL,
                     help=f'signaling server, "" = from the cloud (default {DEFAULT_SIGNAL_URL})')

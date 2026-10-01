@@ -1,4 +1,4 @@
-# MediaRush – Run and Deploy Guide
+# FileJet – Run and Deploy Guide
 
 This guide takes you from a fresh checkout to a running system, step by step:
 
@@ -10,10 +10,10 @@ This guide takes you from a fresh checkout to a running system, step by step:
 | [4. Run each part one by one](#4-run-each-part-one-by-one) | You want to start/stop each part yourself |
 | [5. Two PCs on the same network](#5-test-with-two-pcs-on-the-same-network) | Testing between real computers in the office |
 | [6. First use in the app](#6-first-use-in-the-app) | Accounts, users, sharing a folder, sending |
-| [7. Build the installable app](#7-build-the-installable-app-mediarushexe) | Making `MediaRush.exe` for users |
+| [7. Build the installable app](#7-build-the-installable-app-filejetexe) | Making `FileJet.exe` for users |
 | [8. Deploy the server without Docker](#8-deploy-the-server-without-docker-windows-or-linux) | Production on a Windows or Linux server (recommended); **8.0 = iotgateway.live** |
 | [9. Deploy the server with Docker](#9-deploy-the-server-with-docker-optional) | Alternative, if you use Docker |
-| [10. Roll out to users](#10-roll-out-to-users) | Giving MediaRush to your team |
+| [10. Roll out to users](#10-roll-out-to-users) | Giving FileJet to your team |
 | [11. Operate: update, back up, logs](#11-operate-update-back-up-logs) | Day-2 tasks |
 | [12. Troubleshooting](#12-troubleshooting) | Something does not work |
 
@@ -24,11 +24,11 @@ Windows commands are for **PowerShell**; Linux/macOS commands are for **bash**.
 
 ## 1. What you are running
 
-MediaRush has three parts. **Files never pass through the servers** – they go directly from one PC to the other.
+FileJet has three parts. **Files never pass through the servers** – they go directly from one PC to the other.
 
 | Part | What it does | Where it runs | Port(s) |
 |---|---|---|---|
-| **MediaRush app** (`mediarush.py` / `MediaRush.exe`) | The desktop app: folders, users, sending/receiving, chat | Every user's PC | – |
+| **FileJet app** (`filejet.py` / `FileJet.exe`) | The desktop app: folders, users, sending/receiving, chat | Every user's PC | – |
 | **Cloud** (`cloud/`, Django) | Accounts, sign-in, users, folders & permissions, transfer **metadata**, web dashboard, e-mails | Server | 8000 (HTTP) |
 | **Signaling server** (`server/`, FastAPI) | Introduces two PCs to each other, online status, encrypted chat/control messages. Never sees file data | Server | 8765 (WebSocket), 8766 (TCP reflector for NAT hole punching) |
 
@@ -72,7 +72,7 @@ python run_dev.py --apps
 ```
 
 This starts the cloud (`http://127.0.0.1:8000/`) and the signaling server (`ws://127.0.0.1:8765/ws`) with a
-matching secret, and opens the MediaRush app **twice** (profiles `one` and `two`) so you can play both sides.
+matching secret, and opens the FileJet app **twice** (profiles `one` and `two`) so you can play both sides.
 
 - Create a **different account in each window** (one account can be online in only one app at a time).
 - E-mails (folder invitations) appear on the web at **http://127.0.0.1:8000/ → Inbox** during development.
@@ -104,7 +104,7 @@ python manage.py runserver 127.0.0.1:8000
 ```
 bash equivalent: `export P2P_CLOUD_JWT_SECRET="..."` instead of `$env:...= "..."`.
 
-Check: open **http://127.0.0.1:8000/** – you should see the MediaRush sign-in page.
+Check: open **http://127.0.0.1:8000/** – you should see the FileJet sign-in page.
 
 ### 4.2 Terminal 2 – Signaling server
 
@@ -118,7 +118,7 @@ Check: open **http://127.0.0.1:8765/healthz** → `{"ok":true,...}`.
 ### 4.3 Terminal 3 – The app (first user)
 
 ```powershell
-python mediarush.py
+python filejet.py
 ```
 
 On the sign-in screen the bottom line shows **Cloud: http://127.0.0.1:8000/** – click **Change** if your
@@ -127,7 +127,7 @@ cloud runs elsewhere. Create an account or sign in.
 ### 4.4 Terminal 4 – The app again (second user, same PC)
 
 ```powershell
-python mediarush.py --profile two
+python filejet.py --profile two
 ```
 
 `--profile` keeps a separate local data folder so two accounts can run on one PC.
@@ -160,9 +160,9 @@ PC **A** runs the servers (and may also run the app); PC **B** only runs the app
    python -m server.main --host 0.0.0.0 --port 8765
    ```
 4. **Windows Firewall on PC A:** allow inbound TCP **8000, 8765, 8766** (or click *Allow* when Windows asks).
-5. On both PCs start the app (`python mediarush.py` or `MediaRush.exe`), click **Change** on the sign-in
+5. On both PCs start the app (`python filejet.py` or `FileJet.exe`), click **Change** on the sign-in
    screen and enter `http://192.168.1.20:8000/`.
-6. The first time a transfer starts, Windows may ask to allow MediaRush through the firewall – click **Allow**
+6. The first time a transfer starts, Windows may ask to allow FileJet through the firewall – click **Allow**
    (private networks). This lets the two PCs connect directly.
 
 ---
@@ -187,7 +187,7 @@ Layout tips: drag the lines between panels to resize, double-click a line to col
 
 ---
 
-## 7. Build the installable app (`MediaRush.exe`)
+## 7. Build the installable app (`FileJet.exe`)
 
 Build on each operating system you want to support (Windows builds `.exe`, macOS/Linux build their own binary).
 
@@ -196,7 +196,7 @@ pip install pyinstaller
 python build_desktop.py
 ```
 
-Result: **`dist\MediaRush.exe`** (~55 MB, single file, no Python needed on users’ PCs).
+Result: **`dist\FileJet.exe`** (~55 MB, single file, no Python needed on users’ PCs).
 The servers are **not** inside the exe.
 
 Optional: preset the cloud URL for your users so they never type it. Users can still change it with
@@ -215,8 +215,8 @@ newer Ubuntu, so build on the oldest version you support (e.g. 22.04):
 cd ftp_app
 bash packaging/linux/build_linux.sh            # same built-in servers as the Windows build
 ```
-Output in `dist/`: `MediaRush` (single program), `mediarush_2.0.0_amd64.deb` (installer with app-menu entry and icon),
-`MediaRush-linux-x86_64.tar.gz`. Install on a user's PC: `sudo apt install ./mediarush_2.0.0_amd64.deb`.
+Output in `dist/`: `FileJet` (single program), `filejet_2.0.0_amd64.deb` (installer with app-menu entry and icon),
+`FileJet-linux-x86_64.tar.gz`. Install on a user's PC: `sudo apt install ./filejet_2.0.0_amd64.deb`.
 
 Automatic builds: `.github/workflows/build-desktop.yml` builds the Windows exe and the Linux .deb (Ubuntu 22.04) on
 GitHub – *Actions → Build desktop app → Run workflow*.
@@ -263,7 +263,7 @@ sudo ss -ltnp | grep -E ':8000|:8765'      # shows what is running there
 # stop it (e.g. sudo systemctl stop <old-service>; sudo systemctl disable <old-service>)
 ```
 
-**3. Install MediaRush** (copy the project to the server first, e.g. `scp -r ftp_app ubuntu@13.204.80.52:~/`):
+**3. Install FileJet** (copy the project to the server first, e.g. `scp -r ftp_app ubuntu@13.204.80.52:~/`):
 ```bash
 cd ~/ftp_app
 sudo bash deploy/linux/install.sh --domain iotgateway.live
@@ -280,7 +280,7 @@ curl http://iotgateway.live/api/config/        # "signaling_url":"ws://iotgatewa
 systemctl status mediarush nginx
 ```
 
-**5. Apps:** MediaRush uses `http://iotgateway.live/` by default – just create an account and sign in.
+**5. Apps:** FileJet uses `http://iotgateway.live/` by default – just create an account and sign in.
 
 > Plain HTTP: sign-in passwords and tokens travel unencrypted between the apps and the server. File data and chat
 > are still encrypted end-to-end between the PCs. To add HTTPS later: run the installer again with `--https`.
@@ -301,26 +301,26 @@ systemctl status mediarush nginx
    powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
    ```
 4. The installer:
-   - copies the server to **`C:\MediaRush`** and installs its Python packages,
-   - writes **`C:\MediaRush\server.env`** with new random secrets,
-   - creates the database **`C:\MediaRush\data\mediarush.sqlite3`**,
-   - registers the task **“MediaRush Server”** (starts at boot, restarts automatically if it stops) and starts it,
+   - copies the server to **`C:\FileJet`** and installs its Python packages,
+   - writes **`C:\FileJet\server.env`** with new random secrets,
+   - creates the database **`C:\FileJet\data\mediarush.sqlite3`**,
+   - registers the task **“FileJet Server”** (starts at boot, restarts automatically if it stops) and starts it,
    - opens the Windows Firewall ports,
    - with `-Domain`: also starts Caddy (web proxy, plain HTTP; add `-Https` for a certificate).
 5. At the end it prints the **Cloud URL** – give this to your users.
 6. Optional admin account for `/admin/`:
    ```powershell
-   & C:\MediaRush\.venv\Scripts\python.exe C:\MediaRush\serve.py --env C:\MediaRush\server.env manage createsuperuser
+   & C:\FileJet\.venv\Scripts\python.exe C:\FileJet\serve.py --env C:\FileJet\server.env manage createsuperuser
    ```
 
 Manage it (Administrator PowerShell):
 
 | Task | Command |
 |---|---|
-| Status | `Get-ScheduledTask "MediaRush Server"` |
-| Stop / start | `Stop-ScheduledTask "MediaRush Server"` / `Start-ScheduledTask "MediaRush Server"` |
-| Log | `Get-Content C:\MediaRush\data\server.log -Tail 50 -Wait` |
-| Change settings | edit `C:\MediaRush\server.env`, then stop + start the task |
+| Status | `Get-ScheduledTask "FileJet Server"` |
+| Stop / start | `Stop-ScheduledTask "FileJet Server"` / `Start-ScheduledTask "FileJet Server"` |
+| Log | `Get-Content C:\FileJet\data\server.log -Tail 50 -Wait` |
+| Change settings | edit `C:\FileJet\server.env`, then stop + start the task |
 | Update to a new version | copy the new project folder, run `install.ps1` again (settings + database are kept) |
 | Remove | `powershell -ExecutionPolicy Bypass -File deploy\windows\uninstall.ps1` (add `-RemoveFiles` to delete everything) |
 
@@ -360,10 +360,10 @@ Manage it:
 ### 8.3 Verify (both)
 
 Open in a browser (use your Cloud URL):
-- `http://192.168.1.20:8000/` or `http://iotgateway.live/` → MediaRush sign-in page
+- `http://192.168.1.20:8000/` or `http://iotgateway.live/` → FileJet sign-in page
 - add `api/config/` to the URL → shows the `signaling_url`
 
-Then in the MediaRush app: sign-in screen → **Change** → enter the Cloud URL → create an account.
+Then in the FileJet app: sign-in screen → **Change** → enter the Cloud URL → create an account.
 The status bar should show **● Online**.
 
 ### 8.4 E-mail (folder invitations)
@@ -377,7 +377,7 @@ EMAIL_PORT=587
 EMAIL_HOST_USER=you@yourdomain.com
 EMAIL_HOST_PASSWORD=your-smtp-password
 EMAIL_USE_TLS=1
-DEFAULT_FROM_EMAIL=MediaRush <no-reply@yourdomain.com>
+DEFAULT_FROM_EMAIL=FileJet <no-reply@yourdomain.com>
 SHOW_EMAIL_OUTBOX=0
 ```
 then restart the server (Windows: stop + start the task; Linux: `sudo systemctl restart mediarush`).
@@ -394,9 +394,9 @@ then restart the server (Windows: stop + start the task; Linux: `sudo systemctl 
 | `DJANGO_SQLITE_PATH` / `DATABASE_URL` | SQLite file (default) or PostgreSQL `postgres://user:pass@host:5432/db`. |
 | `CLOUD_PORT`, `SIGNAL_PORT`, `REFLECTOR_PORT` | 8000 / 8765 / 8766. |
 | `EMAIL_*`, `DEFAULT_FROM_EMAIL`, `SHOW_EMAIL_OUTBOX` | E-mail, see 8.4. |
-| `SITE_COMPANY` | Company name on the website (footer, About). Default `MediaRush`. |
+| `SITE_COMPANY` | Company name on the website (footer, About). Default `FileJet`. |
 | `SITE_CONTACT_EMAIL` | Shows *Contact* and *Request a demo* buttons on the website when set. |
-| `DOWNLOADS_DIR` | Folder with the files offered on `/download/` (default `cloud/downloads/`): put `MediaRush.exe`, `mediarush_*_amd64.deb`, `MediaRush-linux-x86_64.tar.gz` there. |
+| `DOWNLOADS_DIR` | Folder with the files offered on `/download/` (default `cloud/downloads/`): put `FileJet.exe`, `filejet_*_amd64.deb`, `FileJet-linux-x86_64.tar.gz` there. |
 
 **Public website:** `/` (home), `/features/`, `/pricing/` (prices come from the plans in the database – edit them in
 `/admin/` → Plans), `/download/`, `/about/`. The signed-in dashboard is at `/dashboard/`.
@@ -445,7 +445,7 @@ Fill in `.env`:
 | `P2P_CLOUD_JWT_SECRET` | random secret #2 (shared by cloud + signaling automatically) |
 | `POSTGRES_PASSWORD` | random secret #3 |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` | your SMTP account |
-| `DEFAULT_FROM_EMAIL` | e.g. `MediaRush <no-reply@iotgateway.live>` |
+| `DEFAULT_FROM_EMAIL` | e.g. `FileJet <no-reply@iotgateway.live>` |
 | `BILLING_PROVIDER` | `dummy` (no payment gateway is included) |
 
 ### 9.4 Start
@@ -460,24 +460,24 @@ docker compose exec cloud python manage.py createsuperuser
 curl http://iotgateway.live/healthz           # {"ok":true,...}  (signaling via Caddy)
 curl http://iotgateway.live/api/config/       # {"signaling_url":"ws://iotgateway.live/ws",...}
 ```
-Open `http://iotgateway.live/` in a browser → MediaRush sign-in page.
+Open `http://iotgateway.live/` in a browser → FileJet sign-in page.
 Admin area: `http://iotgateway.live/admin/`.
 
 ### 9.6 Connect the apps
-In MediaRush: sign-in screen → **Change** → `http://iotgateway.live/` → create account / sign in.
+In FileJet: sign-in screen → **Change** → `http://iotgateway.live/` → create account / sign in.
 The status bar should show **● Online**.
 
 ---
 
 ## 10. Roll out to users
 
-1. Build `MediaRush.exe` ([section 7](#7-build-the-installable-app-mediarushexe)) and share it (file share, intranet, e-mail link).
+1. Build `FileJet.exe` ([section 7](#7-build-the-installable-app-filejetexe)) and share it (file share, intranet, e-mail link).
 2. Tell users the **cloud URL** (`http://iotgateway.live/`, the app's default) – they enter it once via **Change** on the
    sign-in screen (or set `P2P_CLOUD_URL` for them).
 3. Each user creates an account and sends their **ID** to whoever shares folders with them.
-4. First transfer: allow MediaRush in the Windows firewall prompt.
+4. First transfer: allow FileJet in the Windows firewall prompt.
 5. For best speed between offices/homes, enable **UPnP** on routers (or forward a TCP port); if two PCs cannot
-   connect directly, MediaRush says so – there is no relay by design (files never pass through a server).
+   connect directly, FileJet says so – there is no relay by design (files never pass through a server).
 
 ---
 
@@ -486,10 +486,10 @@ The status bar should show **● Online**.
 | Task | Windows server | Linux server | Docker |
 |---|---|---|---|
 | Update | copy new files, run `install.ps1` again | copy new files, run `install.sh` again | `docker compose up -d --build` |
-| Logs | `C:\MediaRush\data\server.log` | `journalctl -u mediarush -f` | `docker compose logs -f cloud` |
-| Restart | stop + start task "MediaRush Server" | `sudo systemctl restart mediarush` | `docker compose restart` |
-| Back up the database | copy `C:\MediaRush\data\mediarush.sqlite3` (stop the task first) | copy `/opt/mediarush/data/mediarush.sqlite3` (stop first) | `docker compose exec db pg_dump -U mediarush mediarush > backup.sql` |
-| Back up settings | `C:\MediaRush\server.env` | `/opt/mediarush/server.env` | `.env` |
+| Logs | `C:\FileJet\data\server.log` | `journalctl -u mediarush -f` | `docker compose logs -f cloud` |
+| Restart | stop + start task "FileJet Server" | `sudo systemctl restart mediarush` | `docker compose restart` |
+| Back up the database | copy `C:\FileJet\data\mediarush.sqlite3` (stop the task first) | copy `/opt/mediarush/data/mediarush.sqlite3` (stop first) | `docker compose exec db pg_dump -U mediarush mediarush > backup.sql` |
+| Back up settings | `C:\FileJet\server.env` | `/opt/mediarush/server.env` | `.env` |
 
 The database holds only metadata (accounts, folders, permissions, transfer records). **Files live on the users’ PCs**
 – back those up with your normal PC/NAS backup.
@@ -510,7 +510,7 @@ App data on each PC (settings, outbox, received-files log, chat history): `%USER
 | No invitation e-mails | Development: see *Inbox* on the web. Production: check `EMAIL_*` in `.env`, then `docker compose logs cloud`. |
 | Users see each other offline | They must be linked: one adds the other by ID in *Users*. Both apps must be signed in. |
 | Files “Waiting for admin” forever | The folder owner’s app must be running and online. Delivery starts automatically. |
-| Transfer cannot connect between two sites | Both behind strict/carrier NAT. Enable UPnP on one router or forward a TCP port to that PC; allow MediaRush in the firewall. |
+| Transfer cannot connect between two sites | Both behind strict/carrier NAT. Enable UPnP on one router or forward a TCP port to that PC; allow FileJet in the firewall. |
 | No video thumbnails | Install ffmpeg and put it on the PATH (images work without it). |
 | Layout looks wrong | *Settings → Reset layout*. |
 

@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Sign in{% endblock %} · MediaRush</title>
+  <title>{% block title %}Sign in{% endblock %} · FileJet</title>
   <link rel="stylesheet" href="{% static 'cloud/style.css' %}">
 </head>
 <body>
 <div class="auth">
   <div class="card">
-    <h1><a href="{% url 'home' %}" style="color:inherit;display:flex;align-items:center;gap:10px"><span class="brand">{% icon "transfers" 26 %}</span> MediaRush</a></h1>
+    <h1><a href="{% url 'home' %}" style="color:inherit;display:flex;align-items:center;gap:10px"><span class="brand">{% icon "transfers" 26 %}</span> FileJet</a></h1>
     {% block content %}{% endblock %}
   </div>
 </div>

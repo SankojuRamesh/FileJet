@@ -1,4 +1,4 @@
-# MediaRush desktop app
+# FileJet desktop app
 PySide6>=6.6          # desktop UI (Qt)
 cryptography>=42
 websockets>=13

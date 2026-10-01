@@ -1,5 +1,5 @@
 {% extends "website/base.html" %}
-{% block title %}About – MediaRush{% endblock %}
+{% block title %}About – FileJet{% endblock %}
 {% block content %}
 <div class="page-head">
   <div class="bg-grid"></div>
@@ -16,13 +16,13 @@
     <div class="row reveal">
       <div class="row-text">
         <span class="eyebrow">The application</span>
-        <h2>What MediaRush is</h2>
+        <h2>What FileJet is</h2>
         <p>A desktop application for Windows and Linux that moves files and folders of any size directly between computers.
           Folders stay on your own PC or NAS; you decide who can see, upload, edit or delete in each one.</p>
         <p>Transfers run over several encrypted streams in parallel, every chunk is verified, and an interrupted transfer picks up
           exactly where it stopped – after a network drop, a sleeping laptop or a power cut.</p>
       </div>
-      <div class="shot">{% include "website/_pic.html" with name="transfers" alt="MediaRush transfers" w=1240 h=700 %}</div>
+      <div class="shot">{% include "website/_pic.html" with name="transfers" alt="FileJet transfers" w=1240 h=700 %}</div>
     </div>
   </div>
 </section>
@@ -64,11 +64,11 @@
     <div class="cta reveal">
       <span class="eyebrow">About us</span>
       <h2>{{ company }}</h2>
-      <p>We build MediaRush for people who move large media every day – editors, producers, studios and the IT teams behind them.
+      <p>We build FileJet for people who move large media every day – editors, producers, studios and the IT teams behind them.
         Our goal: the fastest, safest way to get a file from one computer to another, with you in control of who sees what.</p>
       <div class="hero-cta">
         {% if contact_email %}<a class="btn btn-primary btn-lg" href="mailto:{{ contact_email }}">Contact us</a>{% endif %}
-        <a class="btn {% if contact_email %}btn-ghost{% else %}btn-primary{% endif %} btn-lg" href="{% url 'download' %}">Download MediaRush</a>
+        <a class="btn {% if contact_email %}btn-ghost{% else %}btn-primary{% endif %} btn-lg" href="{% url 'download' %}">Download FileJet</a>
       </div>
     </div>
   </div>

@@ -1,4 +1,4 @@
-"""Settings for the MediaRush cloud app (accounts, users, folders & permissions, transfer metadata).
+"""Settings for the FileJet cloud app (accounts, users, folders & permissions, transfer metadata).
 
 The cloud app never receives file contents. It stores account data and *metadata* about
 transfers (name, size, time, sender, receiver, status, speed) reported by the desktop apps.
@@ -124,9 +124,9 @@ LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
 # Public website (/, /features/, /pricing/, /download/, /about/)
-SITE_COMPANY = os.environ.get("SITE_COMPANY", "MediaRush")
+SITE_COMPANY = os.environ.get("SITE_COMPANY", "FileJet")
 SITE_CONTACT_EMAIL = os.environ.get("SITE_CONTACT_EMAIL", "")      # shown as "Contact" / "Request a demo" when set
-DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", str(BASE_DIR / "downloads"))   # MediaRush.exe, .deb, .tar.gz
+DOWNLOADS_DIR = os.environ.get("DOWNLOADS_DIR", str(BASE_DIR / "downloads"))   # FileJet.exe, .deb, .tar.gz
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -178,7 +178,7 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", f"MediaRush <no-reply@{DOMAIN}>")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", f"FileJet <no-reply@{DOMAIN}>")
 SHOW_EMAIL_OUTBOX = os.environ.get("SHOW_EMAIL_OUTBOX", "1" if DEBUG else "0") == "1"
 
 if not DEBUG:

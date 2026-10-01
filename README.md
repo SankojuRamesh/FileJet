@@ -1,4 +1,4 @@
-# MediaRush
+# FileJet
 
 > **Step-by-step run & deployment guide: [docs/RUN_AND_DEPLOY.md](docs/RUN_AND_DEPLOY.md)**
 
@@ -38,7 +38,7 @@ transfers, but only their names, sizes, times and status.
           └──────▲───────────────────────────────────────▲────────────┘
                  │ REST (JWT)                  REST (JWT) │
      ┌───────────┴──────────┐   signaling / presence  ┌───┴──────────────────┐
-     │ MediaRush            │◄── (tiny, E2E-encrypted ►│ MediaRush            │
+     │ FileJet            │◄── (tiny, E2E-encrypted ►│ FileJet            │
      │ (studio manager)     │     control messages)    │ (editor)             │
      │ folder on THIS PC    │                          │ outbox on THIS PC    │
      └──────────┬───────────┘                          └──────────┬───────────┘
@@ -102,13 +102,13 @@ python run_dev.py --apps     # cloud + signaling server, and the app opened twic
 ```
 * Sign in to the two windows with **two different accounts**. One account can be online in only one app at a time.
 * Development e-mails are shown on the web at http://127.0.0.1:8000/ → **Inbox**.
-* To start the app on its own, run `python mediarush.py`. For a second profile on the same PC, run
-  `python mediarush.py --profile two`.
+* To start the app on its own, run `python filejet.py`. For a second profile on the same PC, run
+  `python filejet.py --profile two`.
 
 ### Installable app
 ```bash
 pip install pyinstaller
-python build_desktop.py      # dist/MediaRush(.exe) - the desktop app
+python build_desktop.py      # dist/FileJet(.exe) - the desktop app
 ```
 The servers are not inside the executable. For testing, use `run_dev.py`; for production, deploy them (§5).
 
@@ -311,7 +311,7 @@ A scripted run of the real windows passes 43/43 steps. It covers:
 
 ```text
 ftp_app/
-├── mediarush.py            the desktop app            run_dev.py   one-command local stack
+├── filejet.py            the desktop app            run_dev.py   one-command local stack
 ├── client/
 │   ├── gui/              window, login, admin_view (My Folders, Users), client_view (Shared with me, My uploads),
 │   │                     views (Transfers, Account, Settings), theme, icons, filetable

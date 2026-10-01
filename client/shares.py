@@ -7,7 +7,7 @@ Model
         read    view & download           upload  send files into the folder
         edit    rename, create folders    delete  delete files and folders
     plus an optional access expiry date. The user receives the folder ID by e-mail and opens it
-    in MediaRush (status invited -> active).
+    in FileJet (status invited -> active).
   * Folder rules: type Share (browse together) or Submit (drop box: uploaders cannot see the
     contents), allowed file types, maximum file size, and upload form fields whose VALUES are
     saved next to the file on the admin's computer only.

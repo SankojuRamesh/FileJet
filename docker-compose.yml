@@ -1,4 +1,4 @@
-# MediaRush server side (the desktop app runs on the users' PCs; files go directly PC-to-PC):
+# FileJet server side (the desktop app runs on the users' PCs; files go directly PC-to-PC):
 #
 #   caddy      :80    http://$P2P_DOMAIN/         -> cloud (Django web dashboard + REST API)
 #                     ws://$P2P_DOMAIN/ws         -> signaling (connection setup)
@@ -42,7 +42,7 @@ services:
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-1}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-MediaRush <no-reply@example.com>}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-FileJet <no-reply@example.com>}
     expose: ["8000"]
 
   signaling:

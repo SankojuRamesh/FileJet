@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Django management entry point for the MediaRush cloud app."""
+"""Django management entry point for the FileJet cloud app."""
 import os
 import sys
 

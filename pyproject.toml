@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mediarush"
+name = "filejet"
 version = "2.0.0"
-description = "MediaRush: fast direct file and folder transfer between computers"
+description = "FileJet: fast direct file and folder transfer between computers"
 requires-python = ">=3.10"
 dependencies = ["PySide6>=6.6", "cryptography>=42", "websockets>=13", "PyJWT>=2.8", "psutil>=5.9"]
 
@@ -19,7 +19,7 @@ build = ["pyinstaller>=6"]
 p2p-signaling = "server.main:main"
 
 [project.gui-scripts]
-mediarush = "client.gui.app:main"
+filejet = "client.gui.app:main"
 
 [tool.setuptools]
 packages = ["client", "client.gui", "server"]

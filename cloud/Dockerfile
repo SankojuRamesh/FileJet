@@ -1,4 +1,4 @@
-# MediaRush cloud: accounts, login (JWT), users, folders & permissions, transfer METADATA dashboard.
+# FileJet cloud: accounts, login (JWT), users, folders & permissions, transfer METADATA dashboard.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DJANGO_DEBUG=0

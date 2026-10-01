@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the MediaRush server (cloud + signaling) on Linux - no Docker. Ubuntu/Debian (apt) tested layout.
+# Installs the FileJet server (cloud + signaling) on Linux - no Docker. Ubuntu/Debian (apt) tested layout.
 #
 #   sudo bash deploy/linux/install.sh                                  # office network, plain HTTP (auto IP)
 #   sudo bash deploy/linux/install.sh --address 192.168.1.20
@@ -70,7 +70,7 @@ if [ -f "$ENV_FILE" ]; then
 else
   step "Writing settings: $ENV_FILE"
   cat > "$ENV_FILE" <<EOF
-# MediaRush server settings (written by install.sh). After changes: sudo systemctl restart mediarush
+# FileJet server settings (written by install.sh). After changes: sudo systemctl restart mediarush
 DJANGO_SECRET_KEY=$(secret)
 P2P_CLOUD_JWT_SECRET=$(secret)
 DJANGO_ALLOWED_HOSTS=$HOSTS
@@ -98,7 +98,7 @@ SHOW_EMAIL_OUTBOX=1
 # EMAIL_HOST_USER=
 # EMAIL_HOST_PASSWORD=
 # EMAIL_USE_TLS=1
-# DEFAULT_FROM_EMAIL=MediaRush <no-reply@example.com>
+# DEFAULT_FROM_EMAIL=FileJet <no-reply@example.com>
 # SHOW_EMAIL_OUTBOX=0
 EOF
   chmod 600 "$ENV_FILE"
@@ -111,7 +111,7 @@ sudo -u mediarush "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/serve.py" --env 
 step "Installing the systemd service 'mediarush'"
 cat > /etc/systemd/system/mediarush.service <<EOF
 [Unit]
-Description=MediaRush server (cloud + signaling)
+Description=FileJet server (cloud + signaling)
 After=network-online.target
 Wants=network-online.target
 
@@ -206,7 +206,7 @@ EOF
 fi
 
 step "Done"
-echo "Cloud URL for the MediaRush app:  $CLOUD_URL"
+echo "Cloud URL for the FileJet app:  $CLOUD_URL"
 echo "Status:   systemctl status mediarush      Logs: journalctl -u mediarush -f"
 echo "Admin:    sudo -u mediarush $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/serve.py --env $ENV_FILE manage createsuperuser"
 echo "Check:    curl ${CLOUD_URL}api/config/"

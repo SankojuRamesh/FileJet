@@ -68,7 +68,7 @@ def main() -> int:
               flush=True)
         if args.apps:
             for profile in ("one", "two"):
-                procs.append(subprocess.Popen([sys.executable, "mediarush.py", "--profile", profile], cwd=ROOT,
+                procs.append(subprocess.Popen([sys.executable, "filejet.py", "--profile", profile], cwd=ROOT,
                                               env=dict(env, P2P_CLOUD_URL=f"http://127.0.0.1:{args.cloud_port}/")))
         while all(p.poll() is None for p in procs[:2]):
             time.sleep(0.5)

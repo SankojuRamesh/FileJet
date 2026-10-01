@@ -199,7 +199,7 @@ def send_invitation(member: FolderMember, request=None) -> OutboundEmail:
         f"    Type:       {'Submit (you send files to ' + admin.label + ')' if f.kind == 'submit' else 'Share'}\n"
         f"    Your role:  {member.role.title()} - you can {', '.join(allowed)}.\n\n"
         f"How to open it:\n"
-        f"  1. Open MediaRush and sign in as {user.username} ({user.email}).\n"
+        f"  1. Open FileJet and sign in as {user.username} ({user.email}).\n"
         f"  2. Click \"Open folder\" and enter the folder ID {f.folder_id}\n"
         f"     (it is also listed under Shared with me).\n\n"
         + (f"    Access until: {member.expires_at:%Y-%m-%d}\n" if member.expires_at else "")

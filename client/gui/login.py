@@ -29,7 +29,7 @@ class LoginDialog(QDialog):
         logo.setPixmap(icons.icon("transfers", C["accent"], size=40).pixmap(40, 40))
         title = label(app_title, "PageTitle")
         lay.addLayout(hbox(logo, title, None, spacing=12))
-        self.subtitle = label("Sign in to MediaRush", muted=True, wrap=True)
+        self.subtitle = label("Sign in to FileJet", muted=True, wrap=True)
         lay.addWidget(self.subtitle)
 
         form = QFormLayout()
@@ -78,8 +78,8 @@ class LoginDialog(QDialog):
         self.username.setPlaceholderText("letters, digits, . _ -" if reg else "Username or e-mail")
         self.submit.setText("Create account" if reg else "Sign in")
         self.toggle.setText("Already have an account? Sign in" if reg else "No account? Create one")
-        self.subtitle.setText("Create your MediaRush account"
-                              if reg else "Sign in to MediaRush")
+        self.subtitle.setText("Create your FileJet account"
+                              if reg else "Sign in to FileJet")
         self.error.setText("")
         self.adjustSize()
 

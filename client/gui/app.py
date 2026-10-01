@@ -1,4 +1,4 @@
-"""Main window of the MediaRush desktop app (Qt, modern dark UI).
+"""Main window of the FileJet desktop app (Qt, modern dark UI).
 
 One app does everything: share your own folders with users (by ID, with permissions), and work in the
 folders other people shared with you - send files into them, download, edit, delete as permitted."""
@@ -25,7 +25,7 @@ from .theme import C, QSS
 log = logging.getLogger("p2p.gui")
 
 APPS = {
-    "app": {"title": "MediaRush", "pages": [("folders", "share", "My Folders"),
+    "app": {"title": "FileJet", "pages": [("folders", "share", "My Folders"),
                                                 ("myfolders", "remote", "Shared with me"),
                                                 ("users", "contacts", "Users"),
                                                 ("chat", "chat", "Chat"),
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         brand.setObjectName("Brand")
         brand.setPixmap(icons.brand_mark(30).pixmap(30, 30))
         brand.setAlignment(Qt.AlignHCenter)
-        brand.setToolTip("MediaRush")
+        brand.setToolTip("FileJet")
         al.addWidget(brand)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
@@ -355,7 +355,7 @@ def run(app_kind: str = "app", profile: str | None = None) -> int:
 
 def main() -> None:
     import argparse
-    ap = argparse.ArgumentParser(description="MediaRush desktop app")
+    ap = argparse.ArgumentParser(description="FileJet desktop app")
     ap.add_argument("--profile", help="separate local data (e.g. to run two accounts on one PC)")
     args, _qt = ap.parse_known_args()
     sys.exit(run("app", args.profile))

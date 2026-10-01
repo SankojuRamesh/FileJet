@@ -177,7 +177,7 @@ def default_data_dir(app: str) -> Path:
 try:                                   # written by build_desktop.py --cloud-url ... --signal-url ...
     from ..build_info import CLOUD_URL as DEFAULT_CLOUD_URL
 except ImportError:
-    DEFAULT_CLOUD_URL = "http://iotgateway.live/"   # MediaRush cloud (change with "Change" on the sign-in screen)
+    DEFAULT_CLOUD_URL = "http://iotgateway.live/"   # FileJet cloud (change with "Change" on the sign-in screen)
 try:
     from ..build_info import SIGNAL_URL as DEFAULT_SIGNAL_URL
 except ImportError:
@@ -187,10 +187,10 @@ _OLD_DEFAULTS = ("http://127.0.0.1:8000/", "http://localhost:8000/", "https://io
 
 
 def load_settings(data_dir: Path) -> dict:
-    frozen = getattr(sys, "frozen", False)               # the packaged MediaRush.exe (not a source/dev run)
+    frozen = getattr(sys, "frozen", False)               # the packaged FileJet.exe (not a source/dev run)
     s = {"cloud_url": os.environ.get("P2P_CLOUD_URL", DEFAULT_CLOUD_URL),
          "server_override": DEFAULT_SIGNAL_URL if frozen else "",
-         "download_dir": str(Path.home() / "Downloads" / "MediaRush"), "streams": 4, "max_streams": 8,
+         "download_dir": str(Path.home() / "Downloads" / "FileJet"), "streams": 4, "max_streams": 8,
          "chunk_size": "Auto", "rate_limit": "", "use_upnp": True, "use_stun": True, "allow_punch": True,
          "verify_full": False}
     try:

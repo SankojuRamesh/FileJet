@@ -1,4 +1,4 @@
-"""MediaRush server without Docker - the cloud and the signaling server in ONE process (Windows and Linux).
+"""FileJet server without Docker - the cloud and the signaling server in ONE process (Windows and Linux).
 
     python serve.py --env server.env            # start (uses the settings file written by the installer)
     python serve.py --env server.env --check    # validate settings + database, then exit
@@ -60,7 +60,7 @@ def setup_django():
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="MediaRush server (cloud + signaling), no Docker needed")
+    ap = argparse.ArgumentParser(description="FileJet server (cloud + signaling), no Docker needed")
     ap.add_argument("--env", default=str(ROOT / "server.env"), help="settings file (default: server.env)")
     ap.add_argument("--host", default=None, help="listen address (default HOST from the env file, else 0.0.0.0)")
     ap.add_argument("--check", action="store_true", help="validate settings and database, then exit")
@@ -100,7 +100,7 @@ def main(argv=None) -> int:
     # ---- cloud (waitress, own thread)
     from waitress import create_server
     cloud = create_server(application, host=cloud_host, port=cloud_port, threads=int(os.environ.get("THREADS", 8)),
-                          ident="MediaRush", trusted_proxy=os.environ.get("TRUSTED_PROXY", "127.0.0.1"),
+                          ident="FileJet", trusted_proxy=os.environ.get("TRUSTED_PROXY", "127.0.0.1"),
                           trusted_proxy_headers={"x-forwarded-proto", "x-forwarded-for"}, clear_untrusted_proxy_headers=True)
 
     def run_cloud():
