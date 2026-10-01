@@ -118,9 +118,10 @@ def sum_line(snaps: list[dict], verb: str) -> tuple[str, int, int]:
     speed = sum(s["speed"] for s in snaps)
     files = sum(s["files"] for s in snaps)
     eta = (total - done) / speed if speed > 0 and total > done else None
+    took = max((s.get("elapsed") or 0) for s in snaps)
     text = (f"{verb} {len(snaps)} transfer{'s' if len(snaps) != 1 else ''} · {files} file(s) · "
             f"{fmt_bytes(done)} of {fmt_bytes(total)} · {fmt_bytes(total - done)} left · {fmt_rate(speed)}"
-            + (f" · {fmt_duration(eta)} left" if eta else ""))
+            + f" · {fmt_duration(took)} so far" + (f" · {fmt_duration(eta)} left" if eta else ""))
     return text, done, total
 
 

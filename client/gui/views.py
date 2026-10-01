@@ -86,7 +86,7 @@ class TransfersView(QWidget):
         lay.addWidget(self.in_label)
         lay.addWidget(self.in_bar)
         self.jobs = table(["Direction", "Name", "From / to", "Folder", "Files", "Size", "Progress", "Left", "Speed",
-                           "Time left", "Status", "Connection", "Started"], stretch=1, row_height=36,
+                           "Time taken", "Time left", "Status", "Connection", "Started", "Finished"], stretch=1, row_height=36,
                           fixed={6: 250})
         jh = self.jobs.horizontalHeader()
         jh.setSectionResizeMode(1, QHeaderView.Interactive)     # name: wide, user-resizable
@@ -103,7 +103,7 @@ class TransfersView(QWidget):
                           button("Refresh", "secondary", "refresh", self.load_history),
                           button("Open web dashboard", "primary", "web", self.open_web)))
         self.history = table(["File name", "Size", "From", "To", "Type", "Status", "Done", "Speed",
-                              "Connection", "Date & time", "Duration"], stretch=0)
+                              "Connection", "Date & time", "Time taken"], stretch=0)
         hl.addWidget(self.history, 1)
         self.hist_msg = label("", muted=True)
         hl.addWidget(self.hist_msg)
@@ -150,13 +150,15 @@ class TransfersView(QWidget):
                 _item(fmt_bytes(s["remaining"]) if s["state"] not in ("completed",) else "-", align_right=True),
                 _item(fmt_rate(s["speed"]) if s["speed"] else
                       (f"avg {fmt_rate(s['avg_speed'])}" if s.get("avg_speed") else "-"), align_right=True),
-                _item(fmt_duration(s["eta"]) if s["eta"] else
-                      (f"took {fmt_duration(s['elapsed'])}" if s["state"] == "completed" else "-"), align_right=True),
+                _item(fmt_duration(s["elapsed"]), C["ok"] if s["state"] == "completed" else None, align_right=True),
+                _item(fmt_duration(s["eta"]) if s["eta"] else "-", align_right=True),
                 _item(STATE_TEXT.get(s["state"], s["state"]) + (f": {s['error']}" if s["error"] else ""),
                       status_color(s["state"])),
                 _item(s["connection"] or "-", C["warn"] if (s["connection"] or "").startswith("RELAYED") else
                       C["ok"] if s["connection"] else None),
                 _item(dt.datetime.fromtimestamp(s["created"]).strftime("%Y-%m-%d %H:%M:%S")),
+                _item(dt.datetime.fromtimestamp(s["finished_at"]).strftime("%Y-%m-%d %H:%M:%S")
+                      if s.get("finished_at") else "-"),
             ]
             for c, it in enumerate(cells):
                 if it is not None:

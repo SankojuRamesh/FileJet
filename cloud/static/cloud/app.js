@@ -48,12 +48,12 @@ const P2P = (() => {
       <td class="num">${t.status === "active" ? rate(t.speed) : rate(t.avg_speed)}</td>
       <td>${conn(t.connection_type)}</td>
       <td>${when(t.started_at)}</td>
-      <td class="num">${dur(t.duration)}</td>
+      <td class="num">${t.duration != null ? dur(t.duration) : t.started_at ? dur((Date.now() - Date.parse(t.started_at)) / 1000) + " so far" : "-"}</td>
     </tr>`;
   }
 
   const HEAD = `<tr><th>File name</th><th class="num">Size</th><th>From</th><th>To</th><th>Type</th>
-    <th>Status</th><th>Progress</th><th class="num">Speed</th><th>Connection</th><th>Date &amp; time</th><th class="num">Duration</th></tr>`;
+    <th>Status</th><th>Progress</th><th class="num">Speed</th><th>Connection</th><th>Date &amp; time</th><th class="num">Time taken</th></tr>`;
 
   async function fetchJSON(url) {
     const r = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });

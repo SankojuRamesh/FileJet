@@ -104,7 +104,7 @@ class Job:
                 "avg_speed": done / elapsed if elapsed > 0 and self.state in FINAL_JOB else None,
                 "transferred": done, "progress": (done / total * 100) if total else
                 (100.0 if self.state == "completed" else 0.0), "speed": speed, "current": current,
-                "connection": conn, "created": self.created,
+                "connection": conn, "created": self.created, "finished_at": self.finished_at,
                 "thumb": next((i.thumb for i in self.items if i.thumb), None),
                 "is_folder": len(self.items) > 1 or any("/" in i.rel for i in self.items)}
 
