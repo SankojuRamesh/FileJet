@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import stat
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -420,6 +421,62 @@ def list_dir(path: Path, root: Path, offset: int = 0, limit: int = PAGE) -> dict
     return {"entries": entries[offset:offset + limit], "total": len(entries), "offset": offset}
 
 
+class FolderSizer:
+    """Total size + file count of shared folders, counted in a background thread so a huge folder never
+    blocks the UI or an RPC. ``peek`` returns the last result at once and starts a recount when it is older
+    than ``max_age`` seconds - so the size follows files being received."""
+
+    def __init__(self, max_age: float = 4.0):
+        self.max_age = max_age
+        self._cache: dict[str, tuple[int, int, float, float]] = {}   # path -> (bytes, files, counted at, took)
+        self._busy: set[str] = set()
+        self._lock = threading.Lock()
+
+    def peek(self, path) -> tuple[int, int] | None:
+        key = str(path)
+        with self._lock:
+            hit = self._cache.get(key)
+            # a folder that takes long to count is recounted less often (at most ~10 % of the time)
+            stale = hit is None or time.monotonic() - hit[2] > max(self.max_age, hit[3] * 10)
+            if stale and key not in self._busy:
+                self._busy.add(key)
+                threading.Thread(target=self._count, args=(key,), name="folder-size", daemon=True).start()
+        return (hit[0], hit[1]) if hit else None
+
+    def _count(self, key: str) -> None:
+        total = files = 0
+        t0 = time.monotonic()
+        try:
+            stack = [key]
+            while stack:
+                try:
+                    with os.scandir(stack.pop()) as it:
+                        for e in it:
+                            try:
+                                if e.is_dir(follow_symlinks=False):
+                                    stack.append(e.path)
+                                elif e.is_file(follow_symlinks=False) and not e.name.endswith(METADATA_SUFFIX):
+                                    total += e.stat(follow_symlinks=False).st_size
+                                    files += 1
+                            except OSError:
+                                continue
+                except OSError:
+                    continue
+        finally:
+            with self._lock:
+                self._cache[key] = (total, files, time.monotonic(), time.monotonic() - t0)
+                self._busy.discard(key)
+
+
+SIZER = FolderSizer()
+
+
+def size_text(size: tuple[int, int] | None) -> str:
+    if size is None:
+        return "counting..."
+    return f"{fmt_bytes(size[0])} · {size[1]} file{'s' if size[1] != 1 else ''}"
+
+
 def walk(path: Path, root: Path, max_files: int = 20000) -> dict:
     """All files below ``path`` (relative to it), for folder downloads."""
     root_real = Path(root).resolve()
@@ -515,6 +572,9 @@ class ShareService:
             if not target.is_dir():
                 raise NotADirectoryError("not a folder")
             data = list_dir(target, folder["path"], int(p.get("offset", 0)), PAGE)
+            size = SIZER.peek(folder["path"])
+            if size is not None:
+                data["folder_size"], data["folder_files"] = size
             data["perms"] = asdict(perms)
             data["rules"] = self._public(folder, perms)["rules"]
             return data

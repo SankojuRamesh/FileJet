@@ -12,7 +12,7 @@
   <nav class="activity" aria-label="Main">
     <a href="{% url 'dashboard' %}" class="{% if active == 'dashboard' %}active{% endif %}" aria-label="Dashboard">{% icon "dashboard" %}<span class="tip">Dashboard</span></a>
     <a href="{% url 'transfers' %}" class="{% if active == 'transfers' %}active{% endif %}" aria-label="Transfers">{% icon "transfers" %}<span class="tip">Transfers</span></a>
-    <a href="{% url 'folders' %}" class="{% if active == 'folders' %}active{% endif %}" aria-label="Folders">{% icon "folder" %}<span class="tip">Folders &amp; permissions</span></a>
+    <a href="{% url 'folders' %}" class="{% if active == 'folders' %}active{% endif %}" aria-label="Folders">{% icon "folder" %}{% if folder_invites %}<span class="dot-new"></span>{% endif %}<span class="tip">Folders &amp; permissions</span></a>
     <a href="{% url 'users' %}" class="{% if active == 'users' %}active{% endif %}" aria-label="Users">{% icon "users" %}<span class="tip">Users</span></a>
     {% if show_outbox %}<a href="{% url 'inbox' %}" class="{% if active == 'inbox' %}active{% endif %}" aria-label="Inbox">{% icon "mail" %}<span class="tip">Inbox (development)</span></a>{% endif %}
     <a href="{% url 'devices' %}" class="{% if active == 'devices' %}active{% endif %}" aria-label="Devices">{% icon "devices" %}<span class="tip">Devices</span></a>

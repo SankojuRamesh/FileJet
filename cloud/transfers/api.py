@@ -62,7 +62,10 @@ class TransferListView(APIView):
     def get(self, request):
         paginator = PageNumberPagination()
         paginator.page_size = min(200, int(request.query_params.get("page_size", 25) or 25))
-        page = paginator.paginate_queryset(filtered(request), request)
+        qs = filtered(request)
+        if request.query_params.get("attempts") != "all":
+            qs = services.with_attempts(qs)
+        page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(TransferSerializer(page, many=True,
                                                                    context={"user": request.user}).data)
 
@@ -73,10 +76,27 @@ class TransferDetailView(APIView):
         return Response(TransferSerializer(rec, context={"user": request.user}).data)
 
 
+class AttemptsView(APIView):
+    """Every try of one file: when it started, how it ended (failed / completed) and why."""
+
+    def get(self, request, transfer_id):
+        log = services.attempt_log(request.user, transfer_id)
+        if not log:
+            return Response({"detail": "not found"}, status=404)
+        total, fails = len(log), sum(1 for r in log if r.status in services.FAILED_STATES)
+        first = max(0, total - 200)                                   # the newest 200 tries
+        return Response({"total": total, "failures": fails, "shown_from": first + 1, "attempts": [
+            {"n": i + 1, "transfer_id": r.transfer_id, "status": r.status, "error": r.error,
+             "started_at": r.started_at, "ended_at": r.completed_at or (r.updated_at if r.status not in r.LIVE else None),
+             "duration": r.duration, "bytes_transferred": r.bytes_transferred, "file_size": r.file_size,
+             "progress": r.progress, "avg_speed": r.avg_speed, "connection_type": r.connection_type}
+            for i, r in enumerate(log) if i >= first]})
+
+
 class StatsView(APIView):
     def get(self, request):
         u = request.user
-        qs = services.visible_to(u)
+        qs = services.visible_to(u).filter(superseded=False)          # one per file, not per retry
         month = timezone.now() - timedelta(days=30)
         agg = qs.aggregate(
             total=Count("id"),

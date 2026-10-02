@@ -356,3 +356,46 @@ class PageTests(Base):
                                             "password": "Str0ng-pass-123", "password2": "Str0ng-pass-123"})
         self.assertRedirects(r, "/dashboard/")
         self.assertEqual(User.objects.get(username="zoe").subscription.plan.code, "free")
+
+
+class AttemptTests(ReportTests):
+    def test_retries_of_one_file_are_one_row_with_failure_count_and_log(self):
+        a, b = self.register("alice"), self.register("bob")
+        common = dict(role="sender", file_name="movie.mp4", relative_path="in/movie.mp4", file_size=1000,
+                      peer_fingerprint=b[2], job_id="job1234")
+        tids = [secrets.token_hex(8) for _ in range(7)]
+        for tid in tids[:6]:
+            self.report(a, tid=tid, state="failed", error="no direct connection possible yet", **common)
+        self.report(a, tid=secrets.token_hex(8), state="failed", **dict(common, relative_path="in/other.jpg"))
+        page = a[0].get("/api/transfers/").json()
+        self.assertEqual(page["count"], 2)                                   # 6 tries + another file
+        row = next(r for r in page["results"] if r["relative_path"] == "in/movie.mp4")
+        self.assertEqual((row["status"], row["attempts"], row["failures"]), ("failed", 6, 6))
+        self.report(a, tid=tids[6], state="completed", **common)              # 7th try works
+        row = next(r for r in a[0].get("/api/transfers/").json()["results"] if r["relative_path"] == "in/movie.mp4")
+        self.assertEqual((row["transfer_id"], row["status"], row["attempts"], row["failures"]),
+                         (tids[6], "completed", 7, 6))
+        log = a[0].get(f"/api/transfers/{tids[6]}/attempts/").json()["attempts"]
+        self.assertEqual([x["status"] for x in log], ["failed"] * 6 + ["completed"])
+        self.assertEqual(log[0]["error"], "no direct connection possible yet")
+        self.assertEqual(b[0].get(f"/api/transfers/{tids[0]}/attempts/").status_code, 200)   # receiver sees it too
+        self.assertEqual(a[0].get("/api/transfers/stats/").json()["failed"], 1)               # per file, not per try
+        self.assertEqual(a[0].get("/api/transfers/?attempts=all").json()["count"], 8)
+
+
+class TransferTimeTests(ReportTests):
+    def test_time_taken_counts_only_data_moving_and_adds_up_resumes(self):
+        a, b = self.register("alice"), self.register("bob")
+        tid = secrets.token_hex(8)
+        base = dict(tid=tid, role="sender", file_name="big.iso", file_size=1000, peer_fingerprint=b[2])
+        self.report(a, state="queued", transfer_time=0, **base)               # waiting: no time yet
+        self.assertIsNone(a[0].get(f"/api/transfers/{tid}/").json()["duration"])
+        self.report(a, state="active", transfer_time=10, **base)
+        self.report(a, state="reconnecting", transfer_time=20, **base)        # network lost after 20 s
+        self.report(b, tid=tid, role="receiver", state="active", transfer_time=999, peer_fingerprint=a[2])  # ignored
+        self.report(a, state="active", transfer_time=5, **base)               # resumed: new run counts from 0
+        self.report(a, state="completed", transfer_time=12, **base)
+        rec = a[0].get(f"/api/transfers/{tid}/").json()
+        self.assertEqual((rec["status"], rec["duration"]), ("completed", 32.0))   # 20 + 12, offline time excluded
+        row = a[0].get("/api/transfers/").json()["results"][0]
+        self.assertEqual(row["duration"], 32.0)

@@ -8,10 +8,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel,
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel, QMessageBox,
                                QLineEdit, QProgressBar, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
+from ..shares import size_text
 from ..util import fmt_bytes, fmt_rate
 from . import icons
 from .common import (big_bar, button, confirm, fmt_time, hbox, label, perm_chips, run_bg, set_bar, show_error,
@@ -116,6 +117,7 @@ class ClientFoldersView(QWidget):
         self.core, self.main = core, main
         self.current: dict | None = None     # {"uid", "folder_id", "name", "kind", "perms", "rules"}
         self.rel = ""
+        self._sizes: dict[str, tuple[int, int]] = {}      # folder_id -> (bytes, files), from the owner
         self.dropbox = False
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -219,6 +221,9 @@ class ClientFoldersView(QWidget):
         self._up_timer = QTimer(self)
         self._up_timer.timeout.connect(self._reload_uploads)
         self._up_timer.start(1000)
+        self._size_timer = QTimer(self)
+        self._size_timer.timeout.connect(self._poll_size)
+        self._size_timer.start(5000)
         self.dest_label = label("", muted=True)
         ml.addLayout(hbox(self.dest_label, button("Change", "link", slot=self._change_dest),
                           button("Open", "link", slot=lambda: show_in_folder(Path(self.core.cfg.dest_dir))), None))
@@ -273,8 +278,10 @@ class ClientFoldersView(QWidget):
                 bool(r.get("thumb")) != self._up_state[r["item_id"]][3])
             self._up_state[r["item_id"]] = key
             if first:
-                t.setItem(i, 0, QTableWidgetItem(icons.thumb_icon(r.get("thumb"), r["rel"], False),
-                                                 f"{r['remote_dir']}/{r['rel']}".strip("/")))
+                full = f"{r['remote_dir']}/{r['rel']}".strip("/")
+                name = QTableWidgetItem(icons.thumb_icon(r.get("thumb"), r["rel"], False), full.split("/")[-1])
+                name.setToolTip(full)                     # only the name in the list, full path on mouse-over
+                t.setItem(i, 0, name)
                 t.setItem(i, 1, QTableWidgetItem(r["folder_name"]))
                 t.setItem(i, 2, QTableWidgetItem(fmt_bytes(r["size"])))
                 t.setItem(i, 5, QTableWidgetItem(fmt_time(r["created_at"])))
@@ -330,7 +337,8 @@ class ClientFoldersView(QWidget):
     def refresh_tree(self):
         self.tree.clear()
         folders = self.core.my_folders()
-        invites = [f for f in folders if f["status"] != "active"]
+        invites = [f for f in folders if f["status"] == "invited"]
+        declined = [f for f in folders if f["status"] == "declined"]
         active = [f for f in folders if f["status"] == "active"]
         if invites:
             head = QTreeWidgetItem([f"NEW - SHARED WITH YOU ({len(invites)})"])
@@ -339,9 +347,22 @@ class ClientFoldersView(QWidget):
             self.tree.addTopLevelItem(head)
             for f in invites:
                 it = QTreeWidgetItem([f"{f['name']}  -  from {f['owner']['display_name'] or f['owner']['username']}"
-                                      "  (click to open)"])
+                                      "  (click to accept)"])
                 it.setIcon(0, icons.icon("plus", C["warn"], size=16))
                 it.setToolTip(0, f"Folder ID {f['folder_id']} · your role: {f['role'].title()}")
+                it.setData(0, ROLE, {"kind": "invite", "folder": f})
+                head.addChild(it)
+            head.setExpanded(True)
+        if declined:
+            head = QTreeWidgetItem([f"DECLINED ({len(declined)})"])
+            head.setFlags(Qt.ItemIsEnabled)
+            head.setForeground(0, Qt.gray)
+            self.tree.addTopLevelItem(head)
+            for f in declined:
+                it = QTreeWidgetItem([f"{f['name']}  -  from {f['owner']['display_name'] or f['owner']['username']}"
+                                      "  (click to accept)"])
+                it.setIcon(0, icons.folder_icon())
+                it.setForeground(0, Qt.gray)
                 it.setData(0, ROLE, {"kind": "invite", "folder": f})
                 head.addChild(it)
             head.setExpanded(True)
@@ -360,7 +381,9 @@ class ClientFoldersView(QWidget):
                 top.setForeground(0, Qt.gray)
             self.tree.addTopLevelItem(top)
             for f in fl:
-                ch = QTreeWidgetItem([f"{f['name']}   [{_perm_tags(f['perms'])}]"])
+                known = self._sizes.get(f["folder_id"])
+                ch = QTreeWidgetItem([f"{f['name']}   ·   {size_text(known)}   [{_perm_tags(f['perms'])}]" if known
+                                      else f"{f['name']}   [{_perm_tags(f['perms'])}]"])
                 ch.setIcon(0, icons.folder_icon())
                 ch.setToolTip(0, f"{f['folder_id']} · {f['kind'].title()} · role {f['role']}")
                 ch.setData(0, ROLE, {"kind": "folder", "uid": uid, "folder": f})
@@ -389,7 +412,7 @@ class ClientFoldersView(QWidget):
         if not d:
             return
         if d["kind"] == "invite":
-            self._join(d["folder"]["folder_id"])
+            self._answer_invite(d["folder"])
         elif d["kind"] == "folder":
             f = d["folder"]
             self.current = {"uid": d["uid"], "folder_id": f["folder_id"], "name": f["name"], "kind": f["kind"],
@@ -404,6 +427,23 @@ class ClientFoldersView(QWidget):
         fid, ok = QInputDialog.getText(self, "Open folder", "Folder ID from your e-mail (e.g. FD-7K3M-9QX2):")
         if ok and fid.strip():
             self._join(fid.strip())
+
+    def _answer_invite(self, f):
+        owner = f["owner"]["display_name"] or f["owner"]["username"]
+        box = QMessageBox(QMessageBox.Question, "Folder invitation",
+                          f"<b>{owner}</b> shared the folder <b>{f['name']}</b> with you.<br><br>"
+                          f"Your role: {f['role'].title()}<br>{perm_chips(f['perms'])}", parent=self)
+        accept = box.addButton("Accept", QMessageBox.AcceptRole)
+        decline = box.addButton("Decline", QMessageBox.DestructiveRole) if f["status"] != "declined" else None
+        box.addButton("Later", QMessageBox.RejectRole)
+        box.setDefaultButton(accept)
+        box.exec()
+        if box.clickedButton() is accept:
+            self._join(f["folder_id"])
+        elif box.clickedButton() is decline:
+            run_bg(lambda: self.core.decline_folder(f),
+                   ok=lambda _r: (self.main.flash(f"Declined '{f['name']}'"), self.refresh_tree()),
+                   err=lambda e: show_error(e, self, "Folder invitation"))
 
     def _join(self, fid):
         def done(f):
@@ -510,6 +550,10 @@ class ClientFoldersView(QWidget):
             self._show_dropbox(bool(data.get("dropbox")))
             self.files.set_entries(data["entries"])
             self.message.setText("" if data.get("dropbox") else f"{len(data['entries'])} item(s)")
+            if data.get("folder_size") is not None:
+                cur["size"] = (data["folder_size"], data.get("folder_files", 0))
+                self._sizes[cur["folder_id"]] = cur["size"]
+                self._show_size(cur)
             self._update_buttons()
 
         def fail(exc):
@@ -518,6 +562,31 @@ class ClientFoldersView(QWidget):
             self.core._refresh_quietly()
             self.refresh_tree()
         run_bg(lambda: self.core.remote_list(cur["uid"], cur["folder_id"], rel), ok=done, err=fail)
+
+    def _poll_size(self):
+        """Every few seconds ask the owner for the folder total, so it grows while files arrive there."""
+        cur = self.current
+        if not cur or not self.isVisible() or not self.core.is_online(cur["uid"]) or self.dropbox:
+            return
+
+        def done(data):
+            if self.current is cur and data.get("folder_size") is not None:
+                cur["size"] = self._sizes[cur["folder_id"]] = (data["folder_size"], data.get("folder_files", 0))
+                self._show_size(cur)
+        run_bg(lambda: self.core.remote_list(cur["uid"], cur["folder_id"], ""), ok=done, err=lambda _e: None)
+
+    def _show_size(self, cur):
+        """Folder total after its name: in the page title and in the tree."""
+        text = size_text(cur.get("size"))
+        self.title.setText(f"{cur['name']}   <span style='color:{C['muted']};font-size:14px'>{text}</span>")
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            for j in range(top.childCount()):
+                ch = top.child(j)
+                d = ch.data(0, ROLE)
+                if d and d.get("kind") == "folder" and d["folder"]["folder_id"] == cur["folder_id"]:
+                    d["folder"]["size"] = cur["size"]
+                    ch.setText(0, f"{cur['name']}   ·   {text}   [{_perm_tags(cur['perms'])}]")
 
     def _show_dropbox(self, on: bool, offline: bool = False):
         self.dropbox = on

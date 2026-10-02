@@ -197,3 +197,12 @@ textarea:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
 .bubble.sv.user { align-self: flex-start; background: var(--panel); border-color: var(--border); }
 .bubble.sv.user .who { color: var(--info); }
 .bubble.sv.staff { align-self: flex-end; background: #04395e; border-color: #0b5a8c; }
+
+/* transfer list: one row per file, click for every try */
+tr.clickable { cursor: pointer; }
+tr.attempt-row > td { background: var(--panel); padding: 10px 16px 14px; }
+.attempt-head { margin: 2px 0 8px; font-weight: 600; }
+table.attempts { font-size: 12px; }
+table.attempts td, table.attempts th { padding: 5px 8px; }
+.small { font-size: 11px; }
+.ok { color: var(--ok, #4cc38a); }

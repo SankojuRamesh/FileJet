@@ -13,6 +13,7 @@ api_urlpatterns = [
     path("", api.OverviewView.as_view()),
     path("create/", api.FoldersView.as_view()),
     path("join/", api.JoinView.as_view()),
+    path("decline/", api.DeclineView.as_view()),
     path("clients/", api.ClientsView.as_view()),
     path("clients/<str:public_id>/", api.ClientDetailView.as_view()),
     path("connections/", api.ConnectionsView.as_view()),

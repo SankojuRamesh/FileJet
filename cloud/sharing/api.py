@@ -131,6 +131,16 @@ class JoinView(APIView):
                              status=m.status))
 
 
+
+class DeclineView(APIView):
+    def post(self, request):
+        try:
+            services.decline_folder(request.user, str(request.data.get("folder_id", "")))
+        except ServiceError as exc:
+            return _err(exc)
+        return Response({"ok": True})
+
+
 class GroupsView(APIView):
     def post(self, request):
         name = str(request.data.get("name", "")).strip()[:80]
@@ -209,7 +219,7 @@ class FolderFilesView(APIView):
         folder = Folder.objects.filter(folder_id=fid).first()
         if folder is None:
             return Response({"detail": "folder not found"}, status=404)
-        qs = TransferRecord.objects.filter(folder_id=fid).select_related("sender", "receiver")
+        qs = TransferRecord.objects.filter(folder_id=fid, superseded=False).select_related("sender", "receiver")
         if folder.owner_id != request.user.id:
             if not FolderMember.objects.filter(folder=folder, user=request.user).exists():
                 return Response({"detail": "folder not found"}, status=404)

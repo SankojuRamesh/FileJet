@@ -4,6 +4,21 @@
 {% block titlebar %}Dashboard{% endblock %}
 {% block content %}
 <h1>Welcome, {{ user.label }}</h1>
+{% if folder_invites %}
+<h2>Folder invitations <span class="badge-new">{{ folder_invites|length }}</span></h2>
+<div class="table-wrap" style="margin-bottom:18px"><table class="grid">
+  <thead><tr><th>Folder</th><th>Folder ID</th><th>Shared by</th><th>Your role</th><th>Permissions</th><th>Invited</th><th></th></tr></thead>
+  <tbody>{% for m in folder_invites %}
+    <tr><td class="name">{% icon "folder" 14 %} {{ m.folder.name }}</td><td class="mono">{{ m.folder.folder_id }}</td>
+      <td>{{ m.folder.owner.label }} <span class="muted">@{{ m.folder.owner.username }}</span></td><td>{{ m.role|title }}</td>
+      <td>{% if m.can_read %}View &amp; download{% endif %}{% if m.can_upload %} · Upload{% endif %}{% if m.can_edit %} · Edit{% endif %}{% if m.can_delete %} · Delete{% endif %}</td>
+      <td>{{ m.invited_at|date:"Y-m-d H:i" }}</td>
+      <td><form method="post" action="{% url 'folders' %}" style="margin:0;display:flex;gap:6px;justify-content:flex-end">{% csrf_token %}
+        <input type="hidden" name="folder_id" value="{{ m.folder.folder_id }}"><input type="hidden" name="next" value="dashboard">
+        <button class="btn small" name="action" value="accept">Accept</button>
+        <button class="btn small secondary" name="action" value="decline" onclick="return confirm('Decline this folder invitation? You can still accept it later from Folders.')">Decline</button></form></td></tr>
+  {% endfor %}</tbody></table></div>
+{% endif %}
 <div class="stats">
   <div class="stat"><div class="label">Files transferred</div><div class="value ok" id="s-completed">-</div></div>
   <div class="stat"><div class="label">Active now</div><div class="value info" id="s-active">-</div></div>

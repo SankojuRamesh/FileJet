@@ -4,14 +4,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QSize, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
                                QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLineEdit, QListWidget,
-                               QListWidgetItem, QPlainTextEdit, QRadioButton, QSpinBox,
+                               QListWidgetItem, QMenu, QPlainTextEdit, QRadioButton, QSpinBox,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
-from ..shares import ROLE_TEXT, ROLES, list_dir, resolve_in_share
+from ..shares import ROLE_TEXT, ROLES, SIZER, list_dir, resolve_in_share, size_text
 from ..util import fmt_bytes, sanitize_filename
 from . import icons
 from .common import (big_bar, button, card, confirm, fmt_time, hbox, label, open_file, page, run_bg, set_bar,
@@ -21,6 +21,14 @@ from .sash import Sash
 from .theme import C
 
 MB = 10 ** 6
+
+
+def _name_item(path: str, icon=None) -> QTableWidgetItem:
+    """Show only the file name; the full path is in the tooltip."""
+    path = (path or "").strip("/")
+    it = QTableWidgetItem(icon, path.split("/")[-1]) if icon is not None else QTableWidgetItem(path.split("/")[-1])
+    it.setToolTip(path)
+    return it
 
 
 def _w(layout):
@@ -147,32 +155,44 @@ class NewFolderDialog(QDialog):
         self.accept()
 
 
-class GiveAccessDialog(QDialog):
-    def __init__(self, parent, users: list[dict], groups: list[dict], preselect: str | None = None):
+class ShareDialog(QDialog):
+    """Share a folder: type a user ID (or username / e-mail), or tick any of your users and groups,
+    then choose the permissions once for everyone ticked."""
+
+    def __init__(self, parent, core, folder: dict, preselect: str | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Give access")
-        self.setMinimumWidth(480)
+        self.core, self.folder = core, folder
+        self.setWindowTitle(f"Share '{folder['name']}'")
+        self.setMinimumSize(600, 640)
         lay = QVBoxLayout(self)
+        lay.addWidget(label(f"Share '{folder['name']}'", "PageTitle"))
+        lay.addWidget(label(f"Folder ID {folder['folder_id']} · the people you tick get an e-mail and see it "
+                            "under 'Shared with me' in their app.", muted=True, wrap=True))
+
+        lay.addWidget(label("ADD BY ID", "SectionTitle"))
+        self.query = QLineEdit(placeholderText="User ID (e.g. 364 866 519), username or e-mail")
+        self.query.returnPressed.connect(self._add_by_id)
+        self.add_btn = button("Add", "secondary", "plus", self._add_by_id)
+        lay.addLayout(hbox(self.query, self.add_btn))
+
+        lay.addWidget(label("YOUR USERS", "SectionTitle"))
+        self.filter = QLineEdit(placeholderText="Search users...")
+        self.filter.textChanged.connect(self._filter)
+        lay.addWidget(self.filter)
+        self.people = QListWidget()
+        self.people.setIconSize(QSize(24, 24))
+        self.people.itemChanged.connect(lambda _it: self._update_ok())
+        lay.addWidget(self.people, 1)
+        self.have = {m["uid"] for m in core.store.members(folder["folder_id"])}
+
         form = QFormLayout()
-        self.who = QComboBox()
-        for u in users:
-            self.who.addItem(icons.icon("account", C["info"], size=16), f"{u['name']}  (@{u['username']})",
-                             ("user", u["uid"]))
-        for g in groups:
-            self.who.addItem(icons.icon("contacts", C["info"], size=16),
-                             f"Group: {g['name']}  ({len(g['members'])} users)", ("group", g["id"]))
-        if preselect:
-            idx = self.who.findData(("user", preselect))
-            if idx >= 0:
-                self.who.setCurrentIndex(idx)
-        form.addRow("User or group", self.who)
         self.role = QComboBox()
         for key in ("uploader", "viewer", "editor", "manager", "custom"):
             self.role.addItem(ROLE_TEXT[key], key)
         form.addRow("Role", self.role)
-        self.boxes = {k: QCheckBox(t) for k, t in (("read", "View & download"), ("upload", "Upload (send files)"),
-                                                   ("edit", "Edit (rename, new folders)"), ("delete", "Delete"))}
-        form.addRow("Permissions", _w(_vbox(*self.boxes.values())))
+        self.boxes = {k: QCheckBox(t) for k, t in (("read", "View && download"), ("upload", "Upload"),
+                                                   ("edit", "Edit"), ("delete", "Delete"))}
+        form.addRow("Permissions", _w(hbox(*self.boxes.values(), None)))
         self.expire_on = QCheckBox("Access ends on")
         self.expire = QDateEdit(QDate.currentDate().addDays(30))
         self.expire.setCalendarPopup(True)
@@ -184,11 +204,91 @@ class GiveAccessDialog(QDialog):
         for cb in self.boxes.values():
             cb.toggled.connect(self._box_changed)
         self._role_changed()
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+
+        bb = QDialogButtonBox()
+        self.ok = bb.addButton("Share", QDialogButtonBox.AcceptRole)
+        cancel = bb.addButton("Cancel", QDialogButtonBox.RejectRole)
+        cancel.setProperty("kind", "secondary")
         bb.accepted.connect(self._ok)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
+        self._fill(check={("user", preselect)} if preselect else set())
 
+    # ---------------------------------------------------------------- people
+    def _fill(self, check: set | None = None):
+        keep = check if check is not None else self.chosen_ids()
+        self.people.blockSignals(True)
+        self.people.clear()
+        clients = {u["public_id"]: u for u in self.core.overview.get("clients", [])}
+        users = sorted((c for uid, c in self.core.contacts.items() if uid in clients),
+                       key=lambda c: c["name"].lower())
+        for g in self.core.overview.get("groups", []):
+            it = QListWidgetItem(icons.icon("contacts", C["info"], size=22),
+                                 f"Group: {g['name']}   ({len(g['members'])} users)")
+            it.setData(Qt.UserRole, ("group", g["id"]))
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked if ("group", g["id"]) in keep else Qt.Unchecked)
+            self.people.addItem(it)
+        for c in users:
+            uid = c["uid"]
+            pid = str(uid)
+            shown_id = f"{pid[:3]} {pid[3:6]} {pid[6:]}" if pid.isdigit() and len(pid) == 9 else pid
+            online = self.core.is_online(uid)
+            text = f"{c['name']}  @{c['username']}   ·   ID {shown_id}   ·   {'online' if online else 'offline'}"
+            it = QListWidgetItem(icons.avatar(c["name"], online, 24), text)
+            it.setData(Qt.UserRole, ("user", uid))
+            if uid in self.have:
+                it.setText(text + "   ·   already has access")
+                it.setFlags(Qt.ItemIsEnabled)
+                it.setForeground(Qt.gray)
+            else:
+                it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+                it.setCheckState(Qt.Checked if ("user", uid) in keep else Qt.Unchecked)
+            self.people.addItem(it)
+        if self.people.count() == 0:
+            it = QListWidgetItem("No users yet - type a user ID above and press Add")
+            it.setFlags(Qt.NoItemFlags)
+            self.people.addItem(it)
+        self.people.blockSignals(False)
+        self._filter(self.filter.text())
+        self._update_ok()
+
+    def _filter(self, text):
+        t = text.strip().lower()
+        for i in range(self.people.count()):
+            it = self.people.item(i)
+            it.setHidden(bool(t) and t not in it.text().lower())
+
+    def chosen_ids(self) -> set:
+        out = set()
+        for i in range(self.people.count()):
+            it = self.people.item(i)
+            if it.data(Qt.UserRole) and it.flags() & Qt.ItemIsUserCheckable and it.checkState() == Qt.Checked:
+                out.add(tuple(it.data(Qt.UserRole)))
+        return out
+
+    def _add_by_id(self):
+        q = self.query.text().strip()
+        if not q:
+            return
+        self.add_btn.setEnabled(False)
+        keep = self.chosen_ids()
+
+        def done(u):
+            self.add_btn.setEnabled(True)
+            self.query.clear()
+            uid = u["public_id"]
+            if uid in self.have:
+                show_error(f"{u.get('display_name') or u['username']} already has access to this folder.", self,
+                           "Share")
+            self._fill(check=keep | {("user", uid)})
+
+        def fail(e):
+            self.add_btn.setEnabled(True)
+            show_error(e, self, "Share")
+        run_bg(lambda: self.core.add_user(q, ""), ok=done, err=fail)
+
+    # ---------------------------------------------------------------- permissions
     def _role_changed(self):
         key = self.role.currentData()
         if key in ROLES:
@@ -204,18 +304,22 @@ class GiveAccessDialog(QDialog):
         self.role.setCurrentIndex(self.role.findData(key))
         self.role.blockSignals(False)
 
+    def _update_ok(self):
+        n = len(self.chosen_ids())
+        self.ok.setText(f"Share with {n}" if n else "Share")
+        self.ok.setEnabled(n > 0)
+
     def _ok(self):
         if not any(cb.isChecked() for cb in self.boxes.values()):
-            return show_error("Give at least one permission.", self)
-        if self.who.currentData() is None:
-            return show_error("Add users first (Users view).", self)
+            return show_error("Give at least one permission.", self, "Share")
+        if not self.chosen_ids():
+            return show_error("Tick at least one user, or add one by ID.", self, "Share")
         self.accept()
 
     def values(self):
-        kind, ident = self.who.currentData()
         perms = {k: cb.isChecked() for k, cb in self.boxes.items()}
         expires = self.expire.date().toString("yyyy-MM-dd") if self.expire_on.isChecked() else None
-        return kind, ident, self.role.currentData(), perms, expires
+        return sorted(self.chosen_ids(), key=str), self.role.currentData(), perms, expires
 
 
 # ================================================================== Folders (admin)
@@ -240,6 +344,8 @@ class AdminFoldersView(QWidget):
                           margins=(0, 0, 8, 0)))
         self.list = QListWidget()
         self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur))
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._folder_menu)
         sl.addWidget(self.list)
         self.sash.addWidget(side)
 
@@ -253,6 +359,7 @@ class AdminFoldersView(QWidget):
         self.fid.setStyleSheet("font-size: 16px;")
         copy = button("Copy ID", "secondary", "copy", self._copy_id, small=True)
         ml.addLayout(hbox(self.title, self.kind, None, self.fid, copy,
+                          button("Share", "primary", "plus", lambda: self.give_access(), small=True),
                           button("Settings", "secondary", "settings", self.edit_settings, small=True),
                           button("Delete", "danger", "trash", self.delete_folder, small=True)))
         self.info = label("", muted=True, wrap=True)
@@ -266,6 +373,9 @@ class AdminFoldersView(QWidget):
         self.arriving.hide()
         self.arriving_bar.hide()
         from PySide6.QtCore import QTimer
+        self._size_timer = QTimer(self)
+        self._size_timer.timeout.connect(self._update_sizes)
+        self._size_timer.start(2000)
         self._arr_timer = QTimer(self)
         self._arr_timer.timeout.connect(self._update_arriving)
         self._arr_timer.start(700)
@@ -288,6 +398,8 @@ class AdminFoldersView(QWidget):
         self.bottom = split
         self.files = FileTable()
         self.files.opened.connect(self._open_entry)
+        self.files.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.files.customContextMenuRequested.connect(self._files_menu)
         split.addWidget(self.files)
         self.tabs = QTabWidget()
         mem = QWidget()
@@ -354,9 +466,7 @@ class AdminFoldersView(QWidget):
         self.list.clear()
         chosen = None
         for f in self.core.store.list():
-            n = len(f["members"])
-            it = QListWidgetItem(icons.folder_icon(), f"{f['name']}\n{f['folder_id']} · {f['kind'].title()} · "
-                                                      f"{n} user{'s' if n != 1 else ''}")
+            it = QListWidgetItem(icons.folder_icon(), self._folder_label(f))
             it.setData(Qt.UserRole, f["folder_id"])
             it.setToolTip(f["path"])
             self.list.addItem(it)
@@ -369,6 +479,43 @@ class AdminFoldersView(QWidget):
         if has:
             self.list.setCurrentItem(chosen or self.list.item(0))
             self._select(self.list.currentItem())
+
+    @staticmethod
+    def _folder_label(f: dict) -> str:
+        n = len(f["members"])
+        return (f"{f['name']}   ·   {size_text(SIZER.peek(f['path']))}\n"
+                f"{f['folder_id']} · {f['kind'].title()} · {n} user{'s' if n != 1 else ''}")
+
+    def _update_sizes(self):
+        """Every few seconds: new totals (files being received make the folder grow)."""
+        if not self.isVisible():
+            return
+        folders = {f["folder_id"]: f for f in self.core.store.list()}      # list() includes the members
+        for i in range(self.list.count()):
+            it = self.list.item(i)
+            f = folders.get(it.data(Qt.UserRole))
+            if f is not None:
+                text = self._folder_label(f)
+                if it.text() != text:
+                    it.setText(text)
+        if self.folder:
+            self.title.setText(f"{self.folder['name']}   <span style='color:{C['muted']};font-size:14px'>"
+                               f"{size_text(SIZER.peek(self.folder['path']))}</span>")
+
+    def _folder_menu(self, pos):
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        self.list.setCurrentItem(item)
+        menu = QMenu(self)
+        menu.addAction(icons.icon("plus", C["accent"], size=16), "Share...", lambda: self.give_access())
+        menu.addAction(icons.icon("copy", C["text"], size=16), "Copy folder ID", self._copy_id)
+        menu.addAction(icons.icon("open", C["text"], size=16), "Open in file explorer",
+                       lambda: show_in_folder(Path(self.folder["path"])) if self.folder else None)
+        menu.addAction(icons.icon("settings", C["text"], size=16), "Settings...", self.edit_settings)
+        menu.addSeparator()
+        menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete folder...", self.delete_folder)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
 
     def _select(self, item):
         if item is None:
@@ -432,7 +579,8 @@ class AdminFoldersView(QWidget):
         f = self.folder
         if not f:
             return
-        self.title.setText(f["name"])
+        self.title.setText(f"{f['name']}   <span style='color:{C['muted']};font-size:14px'>"
+                           f"{size_text(SIZER.peek(f['path']))}</span>")
         color = C["warn"] if f["kind"] == "submit" else C["info"]
         self.kind.setText(f"<span style='color:{color}'>{f['kind'].title()}</span>")
         self.fid.setText(f["folder_id"])
@@ -467,7 +615,7 @@ class AdminFoldersView(QWidget):
         t.setRowCount(0)
         t.setRowCount(len(rows))
         for r, x in enumerate(rows):
-            t.setItem(r, 0, QTableWidgetItem(icons.thumb_icon(x.get("thumb"), x["name"], False), x["rel_path"]))
+            t.setItem(r, 0, _name_item(x["rel_path"], icons.thumb_icon(x.get("thumb"), x["name"], False)))
             t.setItem(r, 1, QTableWidgetItem(x["sender_name"] or x["sender_uid"]))
             size = QTableWidgetItem(fmt_bytes(x["size"]))
             size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -513,8 +661,8 @@ class AdminFoldersView(QWidget):
             t.setRowCount(len(rows))
             for r, x in enumerate(rows):
                 s = x.get("sender") or {}
-                t.setItem(r, 0, QTableWidgetItem(icons.icon_for_name(x["file_name"], False),
-                                                 x.get("relative_path") or x["file_name"]))
+                t.setItem(r, 0, _name_item(x.get("relative_path") or x["file_name"],
+                                           icons.icon_for_name(x["file_name"], False)))
                 t.setItem(r, 1, QTableWidgetItem(s.get("display_name") or s.get("username") or "-"))
                 t.setItem(r, 2, QTableWidgetItem(fmt_bytes(x["file_size"])))
                 status = {"queued": "Waiting (sender's PC)", "failed": "Failed - will retry"}.get(
@@ -594,6 +742,49 @@ class AdminFoldersView(QWidget):
         if d:
             self._copy_in([Path(d)])
 
+    def _files_menu(self, pos):
+        """Right-click on a file or folder inside the shared folder."""
+        if self.files.itemAt(pos) is None:
+            return
+        row = self.files.itemAt(pos).row()
+        if not self.files.item(row, 0).isSelected():
+            self.files.selectRow(row)
+        sel = self.files.selected_entries()
+        if not sel:
+            return
+        menu = QMenu(self)
+        if len(sel) == 1 and sel[0]["dir"]:
+            menu.addAction(icons.folder_icon(True), "Open", lambda: self._open_entry(sel[0]))
+            menu.addAction(icons.icon("plus", C["accent"], size=16), "Share this folder...",
+                           lambda: self.share_subfolder(sel[0]["name"]))
+        else:
+            menu.addAction(icons.icon("open", C["text"], size=16), "Open", self.open_selected)
+        menu.addAction(icons.icon("open", C["text"], size=16), "Show in file explorer",
+                       lambda: show_in_folder(self._path() / sel[0]["name"]))
+        menu.addSeparator()
+        if len(sel) == 1:
+            menu.addAction(icons.icon("rename", C["text"], size=16), "Rename...", self.rename_selected)
+        menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete...", self.delete_selected)
+        menu.exec(self.files.viewport().mapToGlobal(pos))
+
+    def share_subfolder(self, name: str):
+        """Share a folder inside this one with other people: it becomes its own shared folder (own ID and
+        permissions); the outer folder's members are not affected."""
+        path = (self._path() / name).resolve()
+        existing = next((f for f in self.core.store.list() if Path(f["path"]).resolve() == path), None)
+        if existing is not None:                      # already shared on its own: just open Share for it
+            self.refresh_folders(existing["folder_id"])
+            return self.give_access()
+        if not confirm(self, "Share folder", f"Share '{name}' with other people?\n\nIt gets its own folder ID "
+                                             "and its own list of people and permissions."):
+            return
+
+        def done(fid):
+            self.refresh_folders(fid)
+            self.main.flash(f"'{name}' is now a shared folder: {fid}")
+            self.give_access()
+        run_bg(lambda: self.core.create_folder(name, path), ok=done)
+
     def open_selected(self):
         sel = self.files.selected_entries()
         if len(sel) == 1 and sel[0]["dir"]:
@@ -641,8 +832,8 @@ class AdminFoldersView(QWidget):
             self.members.setItem(r, 0, QTableWidgetItem(icons.avatar(m["name"], online, 26),
                                                         f"{m['name']}  (@{m['username']})"))
             self.members.setItem(r, 1, QTableWidgetItem(m["email"]))
-            st = QTableWidgetItem("Opened" if m["status"] == "active" else "Invited")
-            st.setForeground(icons_color(C["ok"] if m["status"] == "active" else C["warn"]))
+            st = QTableWidgetItem({"active": "Joined", "declined": "Declined"}.get(m["status"], "Invited"))
+            st.setForeground(icons_color({"active": C["ok"], "declined": C["bad"]}.get(m["status"], C["warn"])))
             self.members.setItem(r, 2, st)
             role = m["role"].title() + (f" ({m['via_group']})" if m["via_group"] else "")
             self.members.setItem(r, 3, QTableWidgetItem(role))
@@ -688,23 +879,32 @@ class AdminFoldersView(QWidget):
     def give_access(self, preselect: str | None = None):
         if not self.folder:
             return
-        have = {m["uid"] for m in self.core.store.members(self.folder["folder_id"])}
-        users = [c for uid, c in sorted(self.core.contacts.items(), key=lambda kv: kv[1]["name"].lower())
-                 if uid not in have and uid in {u["public_id"] for u in self.core.overview.get("clients", [])}]
-        groups = self.core.overview.get("groups", [])
-        if not users and not groups:
-            return show_error("Add users first in the Users view (by their ID).", self, "Give access")
-        d = GiveAccessDialog(self, users, groups, preselect)
+        d = ShareDialog(self, self.core, self.folder, preselect)
         if d.exec() != QDialog.Accepted:
             return
-        kind, ident, role, perms, expires = d.values()
+        chosen, role, perms, expires = d.values()
         fid = self.folder["folder_id"]
-        if kind == "group":
-            job = lambda: self.core.add_group_to_folder(fid, ident, role, expires)     # noqa: E731
-        else:
-            job = lambda: self.core.set_member(fid, ident, role=None if role == "custom" else role,  # noqa: E731
-                                               perms=perms, expires_at=expires)
-        run_bg(job, ok=lambda _r: (self.refresh_folders(fid), self.main.flash("Access given - e-mail sent.")))
+
+        def job():
+            failed = []
+            for kind, ident in chosen:
+                try:
+                    if kind == "group":
+                        self.core.add_group_to_folder(fid, ident, "manager" if role == "custom" else role, expires)
+                    else:
+                        self.core.set_member(fid, ident, role=None if role == "custom" else role, perms=perms,
+                                             expires_at=expires)
+                except Exception as exc:                       # keep going: share with the others
+                    failed.append(f"{ident}: {exc}")
+            return len(chosen) - len(failed), failed
+
+        def done(res):
+            ok, failed = res
+            self.refresh_folders(fid)
+            self.main.flash(f"Shared with {ok} - they get an e-mail and see it in their app.")
+            if failed:
+                show_error("Could not share with:\n" + "\n".join(failed), self, "Share")
+        run_bg(job, ok=done)
 
     def on_presence(self):
         if self.folder:

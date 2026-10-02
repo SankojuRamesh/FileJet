@@ -6,9 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHeaderView, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHeaderView, QLineEdit, QProgressBar,
                                QSpinBox,
-                               QTableWidgetItem, QTabWidget, QWidget)
+                               QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from ..util import fmt_bytes, fmt_duration, fmt_rate
 from . import icons
@@ -48,6 +48,71 @@ def _w(layout):
 KIND_TEXT = {"upload": ("Sending", "upload"), "send": ("Sending", "upload"),
              "download": ("Receiving", "download"), "receive": ("Receiving", "download")}
 OUTGOING = ("upload", "send")
+
+
+def _local(iso):
+    return dt.datetime.fromisoformat(str(iso).replace("Z", "+00:00")).astimezone() if iso else None
+
+
+def _took(s: dict):
+    """Time taken = only while data was moving; waiting (other side offline, connecting) is in the tooltip."""
+    it = _item(fmt_duration(s["elapsed"]) if s["elapsed"] >= 0.05 or s["state"] == "completed" else "-",
+               C["ok"] if s["state"] == "completed" else None, align_right=True)
+    if s.get("waited", 0) >= 1:
+        it.setToolTip(f"Transferring: {fmt_duration(s['elapsed'])}\n"
+                      f"Waiting (offline / connecting), not counted: {fmt_duration(s['waited'])}")
+    return it
+
+
+def _times(n: int) -> str:
+    return f"{n} time{'s' if n != 1 else ''}"
+
+
+def _status_with_tries(t: dict) -> str:
+    """'Failed 6 times' instead of six rows; 'Completed (after 6 failed tries)'."""
+    f = int(t.get("failures") or 0)
+    if t["status"] == "failed":
+        return f"Failed {_times(max(f, 1))}"
+    text = STATE_TEXT.get(t["status"], t["status"])
+    if not f:
+        return text
+    return f"{text} (after {f} failed tr{'y' if f == 1 else 'ies'})" if t["status"] == "completed"         else f"{text} (try {t.get('attempts', f + 1)}, failed {_times(f)})"
+
+
+class AttemptsDialog(QDialog):
+    """Every try of one file: started, ended, result, bytes, time, reason."""
+
+    def __init__(self, parent, name: str, data: dict):
+        super().__init__(parent)
+        self.setWindowTitle(f"Tries - {name}")
+        self.resize(980, 420)
+        lay = QVBoxLayout(self)
+        attempts = data["attempts"]
+        last = attempts[-1] if attempts else {}
+        head = f"{name}: tried {_times(data['total'])}, failed {_times(data['failures'])}"
+        if last.get("status") == "completed":
+            head += f", completed {_local(last['ended_at']):%Y-%m-%d %H:%M:%S}"
+        if data.get("shown_from", 1) > 1:
+            head += f"  (showing tries {data['shown_from']}-{data['total']})"
+        lay.addWidget(label(head, "SectionTitle", wrap=True))
+        tbl = table(["Try", "Started", "Ended", "Result", "Transferred", "Time", "Speed", "Connection", "Reason"],
+                    stretch=8)
+        tbl.setRowCount(len(attempts))
+        for r, a in enumerate(attempts):
+            st, en = _local(a["started_at"]), _local(a.get("ended_at"))
+            cells = [_item(f"#{a['n']}", align_right=True), _item(f"{st:%Y-%m-%d %H:%M:%S}"),
+                     _item(f"{en:%Y-%m-%d %H:%M:%S}" if en else "-"),
+                     _item(STATE_TEXT.get(a["status"], a["status"]), status_color(a["status"])),
+                     _item(f"{fmt_bytes(a['bytes_transferred'])} / {fmt_bytes(a['file_size'])}", align_right=True),
+                     _item(fmt_duration(a["duration"]) if a["duration"] is not None else "-", align_right=True),
+                     _item(fmt_rate(a["avg_speed"]) if a["avg_speed"] else "-", align_right=True),
+                     _item(a["connection_type"] or "-"), _item(a["error"] or "")]
+            for c, it in enumerate(cells):
+                tbl.setItem(r, c, it)
+        lay.addWidget(tbl, 1)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
 
 
 class TransfersView(QWidget):
@@ -104,6 +169,8 @@ class TransfersView(QWidget):
                           button("Open web dashboard", "primary", "web", self.open_web)))
         self.history = table(["File name", "Size", "From", "To", "Type", "Status", "Done", "Speed",
                               "Connection", "Date & time", "Time taken"], stretch=0)
+        self.history.setToolTip("Click a row to see every try")
+        self.history.cellClicked.connect(self._show_attempts)
         hl.addWidget(self.history, 1)
         self.hist_msg = label("", muted=True)
         hl.addWidget(self.hist_msg)
@@ -150,7 +217,7 @@ class TransfersView(QWidget):
                 _item(fmt_bytes(s["remaining"]) if s["state"] not in ("completed",) else "-", align_right=True),
                 _item(fmt_rate(s["speed"]) if s["speed"] else
                       (f"avg {fmt_rate(s['avg_speed'])}" if s.get("avg_speed") else "-"), align_right=True),
-                _item(fmt_duration(s["elapsed"]), C["ok"] if s["state"] == "completed" else None, align_right=True),
+                _took(s),
                 _item(fmt_duration(s["eta"]) if s["eta"] else "-", align_right=True),
                 _item(STATE_TEXT.get(s["state"], s["state"]) + (f": {s['error']}" if s["error"] else ""),
                       status_color(s["state"])),
@@ -202,24 +269,35 @@ class TransfersView(QWidget):
             for r, t in enumerate(rows):
                 sender = (t["sender"] or {}).get("display_name") or (t["sender"] or {}).get("username") or "-"
                 receiver = (t["receiver"] or {}).get("display_name") or (t["receiver"] or {}).get("username") or "-"
-                started = dt.datetime.fromisoformat(t["started_at"].replace("Z", "+00:00")).astimezone()
+                started = _local(t.get("first_started_at") or t["started_at"])
                 cells = [
                     _item(t["file_name"], icon=icons.icon_for_name(t["file_name"], False)),
                     _item(fmt_bytes(t["file_size"]), align_right=True), _item(sender), _item(receiver),
                     _item(("Sent by me" if t.get("my_role") == "sender" else "Received") + (" (download)" if t["direction"] == "download" else "")
                           + (f" · {t['share_name']}" if t["share_name"] else "")),
-                    _item(STATE_TEXT.get(t["status"], t["status"]), status_color(t["status"])),
+                    _item(_status_with_tries(t), status_color(t["status"])),
                     _item(f"{t['progress']:.0f}%", align_right=True),
                     _item(fmt_rate(t["avg_speed"]) if t["avg_speed"] else "-", align_right=True),
                     _item(t["connection_type"] or "-"),
                     _item(started.strftime("%Y-%m-%d %H:%M:%S")),
                     _item(fmt_duration(t["duration"]) if t["duration"] is not None else "-", align_right=True),
                 ]
+                cells[0].setToolTip(t.get("relative_path") or t["file_name"])   # full path on mouse-over
                 for c, it in enumerate(cells):
+                    it.setData(Qt.UserRole, t["transfer_id"])
                     self.history.setItem(r, c, it)
             self.hist_msg.setText(f"{data['count']} transfer(s) recorded in your account (metadata only).")
         run_bg(lambda: self.core.cloud.history(page_size=200), ok=done,
                err=lambda e: self.hist_msg.setText(f"Cloud unavailable: {e}"))
+
+    def _show_attempts(self, row, _col):
+        it = self.history.item(row, 0)
+        if it is None or not it.data(Qt.UserRole):
+            return
+        name = it.text()
+        run_bg(lambda: self.core.cloud.transfer_attempts(it.data(Qt.UserRole)),
+               ok=lambda d: AttemptsDialog(self, name, d).exec(),
+               err=lambda e: show_error(e, self, "Transfer"))
 
     def open_web(self):
         QDesktopServices.openUrl(QUrl(self.core.cloud.base + "transfers/"))

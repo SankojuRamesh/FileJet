@@ -40,6 +40,12 @@ class TransferRecord(models.Model):
     error = models.CharField(max_length=300, blank=True)
     folder_id = models.CharField(max_length=12, blank=True, db_index=True)
     job_total = models.PositiveIntegerField(default=0)          # files in the same batch (for one notification)
+    # retries of the same file (same job + path) share a key; only the newest attempt is listed,
+    # the older ones are "superseded" and shown as that row's attempt log
+    attempt_key = models.CharField(max_length=200, blank=True, db_index=True)
+    active_seconds = models.FloatField(default=0)     # data really moving (no waiting / offline time)
+    active_last = models.FloatField(default=0)        # sender app's last reported value (resets on resume)
+    superseded = models.BooleanField(default=False, db_index=True)
 
     started_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -57,8 +63,18 @@ class TransferRecord(models.Model):
 
     @property
     def duration(self) -> float | None:
-        end = self.completed_at or (self.updated_at if self.status not in self.LIVE else None)
+        """Real transfer time reported by the apps; old records (before it was reported) use start->end."""
+        if self.active_seconds > 0:
+            return self.active_seconds
+        if self.status in self.LIVE:
+            return None
+        end = self.completed_at or self.updated_at
         return (end - self.started_at).total_seconds() if end else None
+
+    def make_attempt_key(self) -> str:
+        if not self.job_id:
+            return self.transfer_id
+        return f"{self.sender_id or ''}|{self.job_id}|{self.relative_path or self.file_name}"[:200]
 
     def __str__(self):
         return f"{self.file_name} ({self.status})"

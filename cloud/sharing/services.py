@@ -173,6 +173,22 @@ def join_folder(user: User, folder_id: str) -> FolderMember:
     return member
 
 
+
+def decline_folder(user: User, folder_id: str) -> None:
+    """The invited user says no (or leaves later). The invitation is kept as "declined", so they can still accept
+    it later; until then they have no access. The admin sees it in the folder's activity."""
+    fid = normalize_folder_id(folder_id)
+    member = FolderMember.objects.filter(folder__folder_id=fid, user=user).select_related("folder__owner").first()
+    if member is None:
+        raise ServiceError("this folder is not shared with you", 404)
+    was = member.status
+    member.status = FolderMember.DECLINED
+    member.save(update_fields=["status", "updated_at"])
+    log_event(member.folder, member.folder.owner, "leave", "",
+              f"{user.username} {'declined the invitation' if was != FolderMember.ACTIVE else 'left the folder'}",
+              actor=user)
+
+
 def connections(user: User):
     """People this user may see online / exchange encrypted messages with:
     the admins who added them and the clients they added."""
@@ -244,7 +260,7 @@ def folder_stats(folder_ids, sender=None) -> dict:
     """Per folder: files received, bytes, waiting/in progress, last upload, senders (metadata only)."""
     from django.db.models import Count, Max, Q, Sum
     from transfers.models import TransferRecord
-    qs = TransferRecord.objects.filter(folder_id__in=list(folder_ids), direction="upload")
+    qs = TransferRecord.objects.filter(folder_id__in=list(folder_ids), direction="upload", superseded=False)
     if sender is not None:
         qs = qs.filter(sender=sender)
     rows = qs.values("folder_id").annotate(

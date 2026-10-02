@@ -5,6 +5,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 
 from accounts.services import ServiceError
+from transfers.services import with_attempts
 
 from . import services
 from .models import ClientLink, Folder, FolderMember, OutboundEmail
@@ -13,17 +14,30 @@ from .models import ClientLink, Folder, FolderMember, OutboundEmail
 @login_required
 def folders(request):
     from transfers.models import TransferRecord
+    if request.method == "POST":
+        fid, action = request.POST.get("folder_id", ""), request.POST.get("action")
+        try:
+            if action == "accept":
+                m = services.join_folder(request.user, fid)
+                messages.success(request, f"You joined '{m.folder.name}'. Open it in the FileJet app to send and receive files.")
+            elif action in ("decline", "leave"):
+                services.decline_folder(request.user, fid)
+                messages.success(request, ("Invitation declined." if action == "decline" else "You left the folder.")
+                                 + " You can accept it again any time under Folders shared with me.")
+        except ServiceError as exc:
+            messages.error(request, str(exc))
+        return redirect("dashboard" if request.POST.get("next") == "dashboard" else "folders")
     owned = list(Folder.objects.filter(owner=request.user).prefetch_related("members__user"))
     mine = list(FolderMember.objects.filter(user=request.user).select_related("folder__owner"))
     stats = services.folder_stats([f.folder_id for f in owned])
     my_stats = services.folder_stats([m.folder.folder_id for m in mine], sender=request.user)
     for f in owned:
         f.stats = stats.get(f.folder_id, services.EMPTY_STATS)
-        f.recent_files = TransferRecord.objects.filter(folder_id=f.folder_id).select_related("sender")[:15]
+        f.recent_files = with_attempts(TransferRecord.objects.filter(folder_id=f.folder_id)).select_related("sender")[:15]
     for m in mine:
         m.stats = my_stats.get(m.folder.folder_id, services.EMPTY_STATS)
-    sent = TransferRecord.objects.filter(sender=request.user, direction="upload",
-                                         folder_id__in=[m.folder.folder_id for m in mine])[:30]
+    sent = with_attempts(TransferRecord.objects.filter(sender=request.user, direction="upload",
+                                         folder_id__in=[m.folder.folder_id for m in mine]))[:30]
     names = {m.folder.folder_id: m.folder.name for m in mine}
     for t in sent:
         t.folder_name = names.get(t.folder_id, t.share_name)

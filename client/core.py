@@ -54,6 +54,12 @@ class JobItem:
     item_id: str = ""
     transfer_id: str = ""
     thumb: bytes | None = None
+    prior_time: float = 0.0       # transfer time of earlier engines of this file (before a resume)
+
+    def set_engine(self, engine) -> None:
+        if self.engine is not None and self.engine is not engine:
+            self.prior_time += self.engine.transfer_time
+        self.engine = engine
 
 
 @dataclass
@@ -80,7 +86,9 @@ class Job:
         speed = 0.0
         current = None
         conn = None
+        busy = 0.0                       # seconds data was really moving (no waiting / offline time)
         for i in self.items:
+            busy += i.prior_time + (i.engine.transfer_time if i.engine is not None else 0.0)
             if i.state == "completed":
                 done += i.size
             elif i.engine is not None:
@@ -95,13 +103,13 @@ class Job:
         done = min(done, total)
         if self.state in FINAL_JOB and self.finished_at is None:
             self.finished_at = time.time()
-        elapsed = (self.finished_at or time.time()) - self.created
+        wall = (self.finished_at or time.time()) - self.created
         return {"job_id": self.job_id, "kind": self.kind, "peer_uid": self.peer_uid, "peer_name": self.peer_name,
                 "title": self.title, "share_name": self.share_name, "state": self.state, "error": self.error,
                 "files": max(len(self.items), self.expected_files), "files_done": finished, "files_failed": failed,
-                "total": total, "remaining": total - done, "elapsed": elapsed,
+                "total": total, "remaining": total - done, "elapsed": busy, "waited": max(0.0, wall - busy),
                 "eta": (total - done) / speed if speed > 0 and total > done else None,
-                "avg_speed": done / elapsed if elapsed > 0 and self.state in FINAL_JOB else None,
+                "avg_speed": done / busy if busy > 0 and self.state in FINAL_JOB else None,
                 "transferred": done, "progress": (done / total * 100) if total else
                 (100.0 if self.state == "completed" else 0.0), "speed": speed, "current": current,
                 "connection": conn, "created": self.created, "finished_at": self.finished_at,
@@ -148,7 +156,7 @@ class CloudReporter(threading.Thread):
                 "direction": meta.get("direction", "code"), "share_name": meta.get("share_name", ""),
                 "relative_path": meta.get("relative_path", ""), "job_id": meta.get("job_id", ""),
                 "initiator": bool(meta.get("initiator")), "folder_id": meta.get("folder_id", ""),
-                "job_total": meta.get("job_total", 0),
+                "job_total": meta.get("job_total", 0), "transfer_time": round(s.get("transfer_time") or 0, 1),
             }
             try:
                 self.core.cloud.report(record)
@@ -178,6 +186,7 @@ class AppCore:
         self._served_lock = threading.Lock()
         self._chat_lock = threading.Lock()
         self._delivering: set[str] = set()
+        self._backoff: dict[str, tuple[float, float]] = {}    # job_id -> (next try, delay): failed connects wait longer
         self.server_override = False
         self.reporter = CloudReporter(self)
         self._hint = threading.Event()
@@ -359,6 +368,11 @@ class AppCore:
         self._nudge(f["owner"]["public_id"])      # the admin's app learns "opened" immediately
         return f
 
+    def decline_folder(self, folder: dict) -> None:
+        self.cloud.decline_folder(folder["folder_id"])
+        self.refresh_contacts()
+        self._nudge(folder["owner"]["public_id"])
+
     def my_folders(self) -> list[dict]:
         return self.overview.get("member", [])
 
@@ -372,6 +386,9 @@ class AppCore:
                 self._outbox_kick.set()                  # the admin came online: deliver waiting files
                 threading.Thread(target=self._flush_chat, args=(uid,), daemon=True).start()   # waiting messages
             elif self.presence is not None and self.presence.connected:
+                for job in list(self.jobs.values()):     # when they are back, the first try is immediate
+                    if job.peer_uid == uid:
+                        self._backoff.pop(job.job_id, None)
                 threading.Thread(target=self._peer_went_offline, args=(uid,), daemon=True).start()
         elif kind == "msg":
             self.messenger.on_msg(*args)
@@ -780,6 +797,7 @@ class AppCore:
             if offset >= page["total"] or not page["entries"]:
                 break
         return {"entries": entries, "perms": page.get("perms"), "rules": page.get("rules") or {},
+                "folder_size": page.get("folder_size"), "folder_files": page.get("folder_files"),
                 "dropbox": bool(page.get("dropbox"))}
 
     def remote_mkdir(self, uid, share_uid, path, name) -> None:
@@ -1014,6 +1032,8 @@ class AppCore:
                 job = self._job_for(job_id, rows)
                 if job_id in self._delivering or job.cancel.is_set():
                     continue
+                if time.monotonic() < self._backoff.get(job_id, (0.0, 0.0))[0]:
+                    continue
                 if not self.is_online(admin):
                     job.state = "queued"
                     continue
@@ -1053,6 +1073,11 @@ class AppCore:
                 job.error = next((i.error for i in job.items if i.error), "some files failed")
             if job.state != "queued":
                 job.done.set()
+                self._backoff.pop(job.job_id, None)
+            elif self.is_online(uid):
+                # the admin is online but we could not connect: try again in 10 s, 20 s, 40 s ... at most 5 min
+                delay = min(300.0, self._backoff.get(job.job_id, (0.0, 5.0))[1] * 2)
+                self._backoff[job.job_id] = (time.monotonic() + delay, delay)
             self._delivering.discard(job.job_id)
             self.emit("job", job.job_id)
 
@@ -1102,7 +1127,7 @@ class AppCore:
                 res = self.call(uid, "fs.upload", dict(params, transfer_id=tid))
                 engine = SenderEngine(cfg, self.db, self.identity, path=Path(r["local_path"]), new_transfer_id=tid,
                                       peer_fp=fp, rendezvous=self.e2e.rendezvous(uid, cert, res["nonce"]), meta=meta)
-            item.engine = engine
+            item.set_engine(engine)
             self.store.remember_transfer(r["transfer_id"], "sender", uid, "upload", share_uid, dest, r["local_path"])
             self.store.outbox_update(r["item_id"], state="sending", error=None, resume=1)
             item.state, item.error = "running", None
@@ -1155,6 +1180,7 @@ class AppCore:
 
     def retry_upload(self, item_id: str) -> None:
         self.store.outbox_update(item_id, state="queued", error=None)
+        self._backoff.clear()                                  # "Retry" means now
         self._outbox_kick.set()
 
     # ---- admin: files received and waiting ----

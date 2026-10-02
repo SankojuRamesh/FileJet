@@ -227,6 +227,9 @@ class CloudClient:
         q = urllib.parse.urlencode({"page": page, **{k: v for k, v in filters.items() if v}})
         return self.request("GET", f"api/transfers/?{q}")
 
+    def transfer_attempts(self, transfer_id: str) -> dict:
+        return self.request("GET", f"api/transfers/{urllib.parse.quote(transfer_id)}/attempts/")
+
     # --------------------------------------------------- users, folders, members (metadata only)
     def overview(self) -> dict:
         """{"owned": [...folders with members], "member": [...], "clients": [...], "admins": [...], "groups": [...]}"""
@@ -265,6 +268,9 @@ class CloudClient:
 
     def join_folder(self, folder_id: str) -> dict:
         return self.request("POST", "api/folders/join/", {"folder_id": folder_id})
+
+    def decline_folder(self, folder_id: str) -> dict:
+        return self.request("POST", "api/folders/decline/", {"folder_id": folder_id})
 
     def create_group(self, name: str) -> dict:
         return self.request("POST", "api/folders/groups/", {"name": name})

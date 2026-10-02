@@ -96,6 +96,8 @@ class EngineBase:
         self.identity = identity
         self.on_event = on_event or (lambda kind, data: None)
         self.state = "starting"
+        self._busy_since: float | None = None     # data is moving since (monotonic)
+        self._busy_total = 0.0                    # earlier active periods (all sessions / resumes)
         self.error: str | None = None
         self.transfer_id: str | None = None
         self.file_name: str | None = None
@@ -133,7 +135,22 @@ class EngineBase:
         self._cancel = self._cancel or cancel
         self._stop.set()
 
+    BUSY = ("active", "verifying")
+
+    @property
+    def transfer_time(self) -> float:
+        """Seconds the file was really being transferred: waiting for the other side, connecting,
+        reconnecting and pauses are not counted."""
+        busy = self._busy_since
+        return self._busy_total + (time.monotonic() - busy if busy is not None else 0.0)
+
     def set_state(self, state: str, **db_fields) -> None:
+        now = time.monotonic()
+        if state in self.BUSY and self._busy_since is None:
+            self._busy_since = now
+        elif state not in self.BUSY and self._busy_since is not None:
+            self._busy_total += now - self._busy_since
+            self._busy_since = None
         self.state = state
         self.emit("state", state=state)
         if self.transfer_id:
@@ -149,7 +166,7 @@ class EngineBase:
             "progress": (self.confirmed / size * 100.0) if size else (100.0 if self.state == "completed" else 0.0),
             "speed": m.current if m else 0.0, "average": m.average if m else 0.0, "peak": m.peak if m else 0.0,
             "eta": m.eta(self.confirmed) if m and self.state == "active" else None,
-            "elapsed": m.elapsed if m else 0.0,
+            "elapsed": m.elapsed if m else 0.0, "transfer_time": self.transfer_time,
             "connection": self.conn_type, "remote": self.remote, "sas": self.sas, "nat": self.nat,
             "streams_active": self.tuner.active if self.tuner else self.streams_total, "streams_total": self.streams_total,
             "chunk_size": self.chunk_size, "error": self.error, "sessions": self.sessions,

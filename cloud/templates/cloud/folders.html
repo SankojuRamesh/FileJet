@@ -38,7 +38,7 @@
         <td>{% if m.can_upload %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
         <td>{% if m.can_edit %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
         <td>{% if m.can_delete %}<span class="pill failed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
-        <td>{% if m.status == "active" %}<span class="pill completed">opened</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+        <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
         <td>{{ m.email_sent_at|date:"Y-m-d H:i"|default:"-" }}</td>
         <td>{{ m.expires_at|date:"Y-m-d"|default:"-" }}{% if m.via_group %} <span class="muted">({{ m.via_group }})</span>{% endif %}</td></tr>
     {% empty %}<tr><td colspan="10" class="empty">No users yet.</td></tr>{% endfor %}
@@ -47,10 +47,10 @@
   <div class="table-wrap"><table class="grid">
     <thead><tr><th>File</th><th>From</th><th class="num">Size</th><th>Status</th><th>Sent</th><th>Completed</th></tr></thead>
     <tbody>{% for t in f.recent_files %}
-      <tr><td class="name">{{ t.relative_path|default:t.file_name }}</td><td>{{ t.sender.label|default:"-" }}</td>
+      <tr class="clickable" data-tid="{{ t.transfer_id }}" title="Click to see every try"><td class="name" title="{{ t.relative_path|default:t.file_name }}">{{ t.file_name }}</td><td>{{ t.sender.label|default:"-" }}</td>
         <td class="num">{{ t.file_size|filesize }}</td>
-        <td><span class="pill {{ t.status }}">{% if t.status == "queued" %}waiting for admin{% else %}{{ t.status }}{% endif %}</span></td>
-        <td>{{ t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>
+        <td>{% include "cloud/_status_tries.html" %}</td>
+        <td>{{ t.first_started_at|default:t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>
     {% empty %}<tr><td colspan="6" class="empty">Nothing sent yet.</td></tr>{% endfor %}
     </tbody></table></div>
   {% with events=f.events.all|slice:":8" %}{% if events %}
@@ -70,13 +70,17 @@
 
 <h2>Folders shared with me ({{ mine|length }})</h2>
 <div class="table-wrap"><table class="grid">
-  <thead><tr><th>Folder</th><th>Folder ID</th><th>Admin</th><th>My role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th></tr></thead>
+  <thead><tr><th>Folder</th><th>Folder ID</th><th>Admin</th><th>My role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th></th></tr></thead>
   <tbody>{% for m in mine %}
     <tr><td class="name">{{ m.folder.name }}</td><td class="mono">{{ m.folder.folder_id }}</td>
       <td>{{ m.folder.owner.label }} <span class="muted">@{{ m.folder.owner.username }}</span></td><td>{{ m.role|title }}</td>
       <td>{{ m.can_read|yesno:"✓,-" }}</td><td>{{ m.can_upload|yesno:"✓,-" }}</td><td>{{ m.can_edit|yesno:"✓,-" }}</td><td>{{ m.can_delete|yesno:"✓,-" }}</td>
-      <td>{% if m.status == "active" %}<span class="pill completed">opened</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td></tr>
-  {% empty %}<tr><td colspan="9" class="empty">No folder has been shared with you.</td></tr>{% endfor %}
+      <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+      <td><form method="post" style="margin:0;display:flex;gap:6px;justify-content:flex-end">{% csrf_token %}<input type="hidden" name="folder_id" value="{{ m.folder.folder_id }}">
+        {% if m.status == "active" %}<button class="btn small secondary" name="action" value="leave" onclick="return confirm('Leave this folder? You can accept it again later from this page.')">Leave</button>
+        {% else %}<button class="btn small" name="action" value="accept">Accept</button>
+        {% if m.status != "declined" %}<button class="btn small secondary" name="action" value="decline" onclick="return confirm('Decline this folder invitation? You can still accept it later.')">Decline</button>{% endif %}{% endif %}</form></td></tr>
+  {% empty %}<tr><td colspan="10" class="empty">No folder has been shared with you.</td></tr>{% endfor %}
   </tbody></table></div>
 
 {% if sent %}
@@ -84,10 +88,11 @@
 <div class="table-wrap"><table class="grid">
   <thead><tr><th>File</th><th>Folder</th><th class="num">Size</th><th>Status</th><th>Sent</th><th>Delivered</th></tr></thead>
   <tbody>{% for t in sent %}
-    <tr><td class="name">{{ t.relative_path|default:t.file_name }}</td><td>{{ t.folder_name }}</td>
+    <tr class="clickable" data-tid="{{ t.transfer_id }}" title="Click to see every try"><td class="name" title="{{ t.relative_path|default:t.file_name }}">{{ t.file_name }}</td><td>{{ t.folder_name }}</td>
       <td class="num">{{ t.file_size|filesize }}</td>
-      <td><span class="pill {{ t.status }}">{% if t.status == "queued" %}waiting for admin{% else %}{{ t.status }}{% endif %}</span></td>
-      <td>{{ t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>{% endfor %}
+      <td>{% include "cloud/_status_tries.html" %}</td>
+      <td>{{ t.first_started_at|default:t.started_at|date:"Y-m-d H:i" }}</td><td>{{ t.completed_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>{% endfor %}
   </tbody></table></div>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script>document.querySelectorAll(".table-wrap").forEach((el) => P2P.attemptClicks(el));</script>{% endblock %}

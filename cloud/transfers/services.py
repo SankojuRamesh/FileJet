@@ -126,6 +126,11 @@ def apply_report(user, data: dict) -> TransferRecord:
         rec.speed = _float(data.get("speed"))
         rec.avg_speed = _float(data.get("avg_speed")) or rec.avg_speed
         rec.peak_speed = max(rec.peak_speed, _float(data.get("peak_speed")))
+    if data.get("transfer_time") is not None and (role == "sender" or not rec.sender_status):
+        t = min(_float(data.get("transfer_time")), 10 ** 8)
+        # the app counts from 0 again after a resume: add the new run on top of the earlier ones
+        rec.active_seconds += t - rec.active_last if t >= rec.active_last else t
+        rec.active_last = t
     if data.get("connection_type"):
         rec.connection_type = str(data["connection_type"])[:40]
     if data.get("file_hash"):
@@ -139,7 +144,12 @@ def apply_report(user, data: dict) -> TransferRecord:
         rec.speed = 0
         rec.completed_at = rec.completed_at or timezone.now()
         rec.error = ""
+    key = rec.make_attempt_key()
+    new_key = key != rec.attempt_key
+    rec.attempt_key = key
     rec.save()
+    if new_key:            # a retry of an earlier attempt: list only this one, keep the old ones as its log
+        TransferRecord.objects.filter(attempt_key=key, pk__lt=rec.pk, superseded=False).update(superseded=True)
     if rec.status == TransferRecord.COMPLETED and not was_completed:
         from sharing.services import notify_completed
         transaction.on_commit(lambda: notify_completed(rec))
@@ -148,3 +158,26 @@ def apply_report(user, data: dict) -> TransferRecord:
 
 def visible_to(user):
     return TransferRecord.objects.filter(Q(sender=user) | Q(receiver=user)).select_related("sender", "receiver")
+
+
+FAILED_STATES = (TransferRecord.FAILED, TransferRecord.CANCELLED)
+
+
+def with_attempts(qs):
+    """Newest attempt per file, with how many times it was tried and how many tries failed."""
+    from django.db.models import Count, IntegerField, Min, OuterRef, Q, Subquery, Sum
+    from django.db.models.functions import Coalesce
+    same = TransferRecord.objects.filter(attempt_key=OuterRef("attempt_key")).order_by().values("attempt_key")
+    return qs.filter(superseded=False).annotate(
+        attempts=Coalesce(Subquery(same.annotate(n=Count("id")).values("n")[:1], output_field=IntegerField()), 1),
+        failures=Coalesce(Subquery(same.annotate(n=Count("id", filter=Q(status__in=FAILED_STATES)))
+                                   .values("n")[:1], output_field=IntegerField()), 0),
+        first_started_at=Subquery(same.annotate(m=Min("started_at")).values("m")[:1]),
+        total_active=Subquery(same.annotate(t=Sum("active_seconds")).values("t")[:1]))
+
+
+def attempt_log(user, transfer_id: str) -> list[TransferRecord]:
+    rec = visible_to(user).filter(transfer_id=transfer_id).first()
+    if rec is None:
+        return []
+    return list(visible_to(user).filter(attempt_key=rec.attempt_key or rec.transfer_id).order_by("started_at", "pk"))

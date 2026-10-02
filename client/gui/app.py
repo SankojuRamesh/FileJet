@@ -199,7 +199,8 @@ class MainWindow(QMainWindow):
     def _update_status(self):
         p = self.core.presence
         online = bool(p and p.connected)
-        self.st_conn.setText("  ●  Online" if online else "  ○  Offline")
+        col = C["ok"] if online else C["bad"]                  # green online, red offline
+        self.st_conn.setText(f"<span style='color:{col}'>&nbsp;●&nbsp; {'Online' if online else 'Offline'}</span>")
         problem = self.core.connection_problem()
         # a short "connecting" moment is normal; only show the banner for real problems
         show = bool(problem) and not problem.startswith("Connecting")

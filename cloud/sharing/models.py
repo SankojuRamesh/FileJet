@@ -81,7 +81,7 @@ class Folder(models.Model):
 
 
 class FolderMember(models.Model):
-    INVITED, ACTIVE = "invited", "active"
+    INVITED, ACTIVE, DECLINED = "invited", "active", "declined"
     folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="members")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="folder_memberships")
     role = models.CharField(max_length=20, default="uploader")
@@ -89,7 +89,8 @@ class FolderMember(models.Model):
     can_upload = models.BooleanField(default=True)
     can_edit = models.BooleanField(default=False)
     can_delete = models.BooleanField(default=False)
-    status = models.CharField(max_length=10, default=INVITED, choices=[(INVITED, "Invited"), (ACTIVE, "Active")])
+    status = models.CharField(max_length=10, default=INVITED, choices=[(INVITED, "Invited"), (ACTIVE, "Active"),
+                                                                          (DECLINED, "Declined")])
     invited_at = models.DateTimeField(auto_now_add=True)
     joined_at = models.DateTimeField(null=True, blank=True)
     email_sent_at = models.DateTimeField(null=True, blank=True)

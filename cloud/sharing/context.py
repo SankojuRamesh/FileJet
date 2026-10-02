@@ -6,6 +6,9 @@ def ui(request):
     user = getattr(request, "user", None)
     if user is not None and user.is_authenticated:
         from support.models import Ticket
+        from .models import FolderMember
+        ctx["folder_invites"] = list(FolderMember.objects.filter(user=user, status=FolderMember.INVITED)
+                                     .select_related("folder__owner")[:20])
         ctx["support_unread"] = Ticket.objects.filter(user=user, user_unread__gt=0).exists()
         if user.is_staff or user.is_superuser:
             ctx["staff_open"] = Ticket.objects.filter(status=Ticket.OPEN).exists()
