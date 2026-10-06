@@ -210,6 +210,9 @@ def test_share_folder_roles_edit_delete_expiry_and_revocation(people, tmp_path):
     with pytest.raises(RpcError, match="delete"):
         carol.remote_delete(a_uid, fid, "docs/b.txt")                     # editor cannot delete
     admin.update_member(fid, c_uid, {"read": True, "upload": True, "edit": True, "delete": True})
+    with pytest.raises(RpcError, match="only delete files you sent"):
+        carol.remote_delete(a_uid, fid, "docs/b.txt")                     # default: only her own files
+    admin.set_member_security(fid, c_uid, False, "none", "email", "all")  # admin allows any file
     carol.remote_delete(a_uid, fid, "docs/b.txt")
     assert not (root / "docs" / "b.txt").exists()
     # expiry in the past -> no access at all
@@ -247,6 +250,46 @@ def test_groups_give_access_to_many_users(stack, people, tmp_path):
     with pytest.raises(RpcError, match="upload"):                          # viewer: read only
         bob.call(admin.me["public_id"], "fs.upload", {"share": fid, "dir": "", "name": "x.bin", "size": 1,
                                                        "transfer_id": "cd" * 8})
+
+
+def test_download_only_with_permission_including_files_added_after_sharing(people, tmp_path):
+    """User 1 shares a folder with user 2, then adds files. User 2 can download them (files and folders) only
+    when 'View & download' is given; Upload alone is send-only."""
+    admin, bob, carol, _m = people
+    a_uid, b_uid, c_uid = admin.me["public_id"], bob.me["public_id"], carol.me["public_id"]
+    root = tmp_path / "Exchange"
+    fid = admin.create_folder("Exchange", root, create=True)
+    admin.set_member(fid, b_uid, role="uploader")                          # upload only
+    bob.join_folder(fid)
+    wait_until(lambda: admin.store.member(fid, b_uid)["status"] == "active", 5, msg="admin sees 'opened'")
+    (root / "added later").mkdir()                                         # user 1 adds files after sharing
+    (root / "added later" / "plan.pdf").write_bytes(os.urandom(MiB))
+    (root / "report.docx").write_bytes(os.urandom(2 * MiB))
+    with pytest.raises(RpcError, match="download|read|view"):
+        bob.call(a_uid, "fs.download", {"share": fid, "path": "report.docx"})   # no permission: refused
+    # user 1 gives 'View & download' + Upload (the Contributor role)
+    m = admin.update_member(fid, b_uid, {"role": "contributor"})
+    assert m["role"] == "contributor" and m["perms"] == {"read": True, "upload": True, "edit": False,
+                                                         "delete": False}
+    wait_until(lambda: {"report.docx", "added later"} <= {e["name"] for e in bob.remote_list(a_uid, fid, "")["entries"]},
+               10, msg="bob sees user 1's files")
+    job = bob.download(a_uid, fid, "Exchange", [("report.docx", False), ("added later", True)], tmp_path / "dl")
+    assert job.done.wait(60) and job.state == "completed", job.error
+    assert sha(tmp_path / "dl" / "report.docx") == sha(root / "report.docx")
+    assert sha(tmp_path / "dl" / "added later" / "plan.pdf") == sha(root / "added later" / "plan.pdf")
+    mine = tmp_path / "from_bob.txt"
+    mine.write_text("hi")
+    up = bob.upload(a_uid, fid, "Exchange", "", [mine])                     # and can still upload
+    assert up.done.wait(60) and up.state == "completed", up.error
+    with pytest.raises(RpcError, match="rename|edit"):
+        bob.remote_rename(a_uid, fid, "report.docx", "x.docx")             # contributor: no rename
+    # a group gets exactly the permissions ticked (custom), never more
+    g = admin.create_group("Downloaders")
+    admin.update_group(g["id"], add=[c_uid])
+    admin.add_group_to_folder(fid, g["id"], None, perms={"read": True, "upload": True, "edit": False,
+                                                         "delete": False})
+    m = admin.store.member(fid, c_uid)
+    assert (m["can_read"], m["can_upload"], m["can_edit"], m["can_delete"]) == (1, 1, 0, 0)
 
 
 def test_send_while_admin_offline_is_delivered_when_admin_comes_online(stack, people, tmp_path):

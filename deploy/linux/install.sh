@@ -3,8 +3,8 @@
 #
 #   sudo bash deploy/linux/install.sh                                  # office network, plain HTTP (auto IP)
 #   sudo bash deploy/linux/install.sh --address 192.168.1.20
-#   sudo bash deploy/linux/install.sh --domain iotgateway.live        # internet, plain HTTP via nginx (or Caddy)
-#   sudo bash deploy/linux/install.sh --domain iotgateway.live --https   # optional: HTTPS certificate (certbot)
+#   sudo bash deploy/linux/install.sh --domain filejet.live        # internet, plain HTTP via nginx (or Caddy)
+#   sudo bash deploy/linux/install.sh --domain filejet.live --https   # optional: HTTPS certificate (certbot)
 #
 # What it does: copies the server to /opt/mediarush, creates a venv, writes server.env with random secrets
 # (kept on re-run), prepares the database (SQLite in /opt/mediarush/data), installs the systemd service
@@ -150,7 +150,7 @@ if [ -n "$DOMAIN" ] && command -v nginx >/dev/null; then
       mv "$f" "$f.disabled-by-mediarush"
     fi
   done
-  sed -e "s/iotgateway\.live/$DOMAIN/g" -e "s/127\.0\.0\.1:8000/127.0.0.1:$CLOUD_PORT/" \
+  sed -e "s/filejet\.live/$DOMAIN/g" -e "s/127\.0\.0\.1:8000/127.0.0.1:$CLOUD_PORT/" \
       -e "s/127\.0\.0\.1:8765/127.0.0.1:$SIGNAL_PORT/g" "$INSTALL_DIR/deploy/nginx/mediarush.conf" \
       > /etc/nginx/sites-available/mediarush
   ln -sf /etc/nginx/sites-available/mediarush /etc/nginx/sites-enabled/mediarush

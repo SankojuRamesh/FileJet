@@ -1,0 +1,5 @@
+[console_scripts]
+p2p-signaling = server.main:main
+
+[gui_scripts]
+filejet = client.gui.app:main

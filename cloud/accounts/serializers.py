@@ -13,6 +13,9 @@ class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     display_name = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    # asked by the sign-up forms; optional here so apps older than 2.10 can still register
+    organization = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    location = serializers.CharField(max_length=120, required=False, allow_blank=True)
 
     def validate_username(self, v):
         if User.objects.filter(username__iexact=v).exists():
@@ -30,7 +33,9 @@ class RegisterSerializer(serializers.Serializer):
 
     def create(self, data):
         user = User.objects.create_user(username=data["username"], email=data["email"], password=data["password"],
-                                        display_name=data.get("display_name", ""))
+                                        display_name=data.get("display_name", ""),
+                                        organization=data.get("organization", "").strip(),
+                                        location=data.get("location", "").strip())
         get_subscription(user)
         return user
 
@@ -60,12 +65,20 @@ class PublicDeviceSerializer(serializers.ModelSerializer):
 class MeSerializer(serializers.ModelSerializer):
     subscription = serializers.SerializerMethodField()
     usage = serializers.SerializerMethodField()
+    platform_admin = serializers.BooleanField(source="is_superuser", read_only=True)   # web admin panel only
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "display_name", "organization", "public_id", "date_joined",
-                  "subscription", "usage"]
+        fields = ["id", "username", "email", "display_name", "organization", "location", "phone", "public_id",
+                  "date_joined", "subscription", "usage", "platform_admin"]
         read_only_fields = ["id", "username", "public_id", "date_joined"]
+
+    def validate_phone(self, v):
+        from .models import normalize_phone
+        try:
+            return normalize_phone(v)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from None
 
     def validate_email(self, v):
         if User.objects.filter(email__iexact=v).exclude(pk=self.instance.pk).exists():

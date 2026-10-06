@@ -1,0 +1,85 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Organizations{% endblock %}
+{% block titlebar %}Staff console › Organizations{% endblock %}
+{% block content %}
+<h1>Organizations</h1>
+{% include "support/_staff_tabs.html" %}
+
+{% if exp.count %}
+<div class="card notice">
+  <div class="toolbar" style="margin-bottom:6px"><b>{% icon "subscription" 16 %} Subscription expiry notifications</b>
+    <span class="pill paused">{{ exp.count }}</span><span class="grow"></span>
+    <form method="get" class="toolbar" style="margin:0"><input type="hidden" name="by" value="{{ by }}"><input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">
+      <label style="margin:0" class="muted">within <select name="within" onchange="this.form.submit()">{% for n in within_opts %}<option value="{{ n }}"{% if n == exp.days %} selected{% endif %}>{{ n }} days</option>{% endfor %}</select></label></form>
+  </div>
+  {% for s in exp.soon %}
+    <div class="exp-line"><span class="pill {% if s.days_left <= 2 %}failed{% else %}paused{% endif %}">{% if s.days_left == 0 %}today{% else %}in {{ s.days_left }} day{{ s.days_left|pluralize }}{% endif %}</span>
+      <a href="{% url 'staff_user' s.user.pk %}">{{ s.user.label }}</a> <span class="muted">{{ s.user.organization|default:"" }} · {{ s.user.email }}</span>
+      – <b>{{ s.plan.name }}</b> ends {{ s.current_period_end|date:"Y-m-d" }}{% if s.cancel_at_period_end %} <span class="muted">(not renewed yet)</span>{% endif %}</div>
+  {% endfor %}
+  {% for s in exp.overdue %}
+    <div class="exp-line"><span class="pill failed">expired</span>
+      <a href="{% url 'staff_user' s.user.pk %}">{{ s.user.label }}</a> <span class="muted">{{ s.user.organization|default:"" }} · {{ s.user.email }}</span>
+      – <b>{{ s.plan.name }}</b> ended {{ s.current_period_end|date:"Y-m-d" }}</div>
+  {% endfor %}
+  {% for s in exp.past_due %}
+    <div class="exp-line"><span class="pill failed">past due</span> <a href="{% url 'staff_user' s.user.pk %}">{{ s.user.label }}</a> – {{ s.plan.name }}</div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card muted">{% icon "check" 14 %} No paid plan expires in the next {{ exp.days }} days.</div>
+{% endif %}
+
+<form class="toolbar" method="get" style="flex-wrap:wrap">
+  <div class="seg">
+    {% for k, t in periods %}<a href="?by={{ k }}&date={{ day|date:'Y-m-d' }}&q={{ q|urlencode }}" class="{% if by == k %}on{% endif %}">{{ t }}</a>{% endfor %}
+  </div>
+  <a class="btn small secondary" href="?by={{ by }}&date={{ prev|date:'Y-m-d' }}&q={{ q|urlencode }}">‹</a>
+  <b style="min-width:220px;text-align:center">{{ label }}</b>
+  <a class="btn small secondary" href="?by={{ by }}&date={{ next|date:'Y-m-d' }}&q={{ q|urlencode }}">›</a>
+  <a class="btn small secondary" href="?by={{ by }}&date={{ today|date:'Y-m-d' }}&q={{ q|urlencode }}">Today</a>
+  <input type="hidden" name="by" value="{{ by }}">
+  <input type="date" name="date" value="{{ day|date:'Y-m-d' }}" onchange="this.form.submit()" aria-label="Date">
+  <span class="grow"></span>
+  <input name="q" value="{{ q }}" placeholder="Search organization, user, location" style="width:260px" aria-label="Search">
+  <button class="btn secondary">Search</button>
+</form>
+
+<div class="stats" style="margin-bottom:12px">
+  <div class="stat"><div class="label">Organizations</div><div class="value">{{ orgs|length }}</div></div>
+  <div class="stat"><div class="label">Users</div><div class="value">{{ users_n }}</div></div>
+  <div class="stat"><div class="label">Active users ({{ by }})</div><div class="value info">{{ active_users }}</div></div>
+  <div class="stat"><div class="label">Data transferred</div><div class="value ok">{{ total_bytes|filesize }}</div></div>
+  <div class="stat"><div class="label">Files</div><div class="value">{{ total_files }}</div></div>
+</div>
+
+<div class="card">
+  <div class="muted" style="margin-bottom:6px">Data transferred per {% if by == "day" %}hour{% else %}day{% endif %} – {{ label }}</div>
+  <div class="trend">{% for t in trend %}<div class="bar" title="{{ t.title }}: {{ t.bytes|filesize }}"><i style="height:{{ t.pct }}%"></i><span>{{ t.label }}</span></div>{% endfor %}</div>
+</div>
+
+<h2>Organizations and their users</h2>
+{% for o in orgs %}
+<details class="rel card"{% if q or orgs|length <= 3 %} open{% endif %}>
+  <summary>
+    <span class="avatar">{{ o.name|slice:":1"|upper }}</span>
+    <span class="rel-name"><b style="color:var(--text-strong)">{{ o.name }}</b>{% if o.locations %} <span class="muted">· {{ o.locations|join:", " }}</span>{% endif %}</span>
+    <span class="grow"></span>
+    <span class="rel-count">{{ o.users|length }} user{{ o.users|length|pluralize }}</span>
+    <span class="rel-count">{{ o.active }} active</span>
+    <span class="rel-count">{{ o.files }} file{{ o.files|pluralize }}</span>
+    <b style="min-width:90px;text-align:right">{{ o.bytes|filesize }}</b>
+  </summary>
+  <div class="rel-body"><div class="table-wrap"><table class="grid">
+    <thead><tr><th>User</th><th>E-mail</th><th>Location</th><th>Plan</th><th>Plan ends</th><th class="num">Files</th><th class="num">Data transferred</th><th>Share</th></tr></thead>
+    <tbody>{% for u in o.users %}
+      <tr><td><a href="{% url 'staff_user' u.pk %}">{{ u.label }}</a> <span class="muted">@{{ u.username }}</span></td>
+        <td>{{ u.email }}</td><td>{{ u.location|default:"—" }}</td><td>{{ u.plan_name }}</td>
+        <td>{{ u.expires|date:"Y-m-d"|default:"—" }}</td>
+        <td class="num">{{ u.t_files }}</td><td class="num"><b>{{ u.t_bytes|filesize }}</b></td>
+        <td style="min-width:120px"><div class="meter thin"><i style="width:{% if o.bytes %}{% widthratio u.t_bytes o.bytes 100 %}{% else %}0{% endif %}%"></i></div></td></tr>
+    {% endfor %}</tbody></table></div></div>
+</details>
+{% empty %}<div class="card muted">No organizations found.</div>{% endfor %}
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "cloud/base.html" %}
+{% load cloud_ui %}
 {% block title %}Staff console{% endblock %}
 {% block titlebar %}Staff console{% endblock %}
 {% block content %}
@@ -16,7 +17,7 @@
   <div class="card">
     <h2 style="margin-top:0">Subscriptions by plan</h2>
     <table class="grid"><thead><tr><th>Plan</th><th class="num">Price</th><th class="num">Users</th></tr></thead>
-      <tbody>{% for p in plans %}<tr><td>{{ p.name }}</td><td class="num">{% if p.price_month %}${{ p.price_month }}{% else %}Free{% endif %}</td>
+      <tbody>{% for p in plans %}<tr><td>{{ p.name }}</td><td class="num">{% if p.price_month %}{{ p.price_month|money:p.currency }}{% else %}Free{% endif %}</td>
         <td class="num"><a href="{% url 'staff_users' %}?plan={{ p.code }}">{{ p.n }}</a></td></tr>{% endfor %}</tbody></table>
   </div>
   <div class="card">

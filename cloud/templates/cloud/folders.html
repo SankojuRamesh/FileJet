@@ -1,17 +1,20 @@
 {% extends "cloud/base.html" %}
 {% load cloud_ui %}
 {% block title %}Folders{% endblock %}
-{% block titlebar %}Folders &amp; permissions{% endblock %}
+{% block titlebar %}Workspaces &amp; sharing{% endblock %}
 {% block content %}
-<h1>Folders &amp; permissions</h1>
-<h2>Folders I administer ({{ owned|length }})</h2>
-{% for f in owned %}
+<h1>Workspaces &amp; sharing</h1>
+<p class="muted" style="margin:-4px 0 14px">A workspace is a folder on your computer shared with people. You can also share
+  just one folder inside it: those people see only that folder. Files never pass through this server.</p>
+<h2>My workspaces ({{ workspaces|length }})</h2>
+{% for f in workspaces %}
 <div class="card">
   <div class="toolbar" style="margin-bottom:8px">
     <span style="color:var(--folder)">{% icon "folder" 18 %}</span>
     <strong style="font-size:15px;color:var(--text-strong)">{{ f.name }}</strong>
     <code style="font-size:13px">{{ f.folder_id }}</code>
     <span class="pill {% if f.kind == 'submit' %}paused{% else %}active{% endif %}">{{ f.get_kind_display }}</span>
+    {% if f.subs %}<span class="pill completed">{{ f.subs|length }} shared folder{{ f.subs|length|pluralize }}</span>{% endif %}
     <span class="grow"></span>
     <span class="muted">created {{ f.created_at|date:"Y-m-d H:i" }}</span>
   </div>
@@ -29,20 +32,21 @@
     <div class="stat"><div class="label">Senders</div><div class="value">{{ f.stats.senders }}</div></div>
     <div class="stat"><div class="label">Last upload</div><div class="value" style="font-size:15px">{{ f.stats.last_upload|date:"Y-m-d H:i"|default:"-" }}</div></div>
   </div>
-  <div class="table-wrap"><table class="grid">
-    <thead><tr><th>User</th><th>ID</th><th>Role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th>E-mail sent</th><th>Access until</th></tr></thead>
-    <tbody>{% for m in f.members.all %}
-      <tr><td><span class="user"><span class="avatar">{{ m.user.label|slice:":1"|upper }}</span>{{ m.user.label }}</span> <span class="muted">{{ m.user.email }}</span></td>
-        <td class="mono">{{ m.user.formatted_id }}</td><td>{{ m.role|title }}</td>
-        <td>{% if m.can_read %}<span class="pill completed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
-        <td>{% if m.can_upload %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
-        <td>{% if m.can_edit %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
-        <td>{% if m.can_delete %}<span class="pill failed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
-        <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
-        <td>{{ m.email_sent_at|date:"Y-m-d H:i"|default:"-" }}</td>
-        <td>{{ m.expires_at|date:"Y-m-d"|default:"-" }}{% if m.via_group %} <span class="muted">({{ m.via_group }})</span>{% endif %}</td></tr>
-    {% empty %}<tr><td colspan="10" class="empty">No users yet.</td></tr>{% endfor %}
-    </tbody></table></div>
+  <h2 style="margin-top:4px">People with access to the whole workspace</h2>
+  {% include "cloud/_members_table.html" with folder=f %}
+  {% for sub in f.subs %}
+  <div class="subshare">
+    <div class="toolbar" style="margin-bottom:6px">
+      <span style="color:var(--folder)">{% icon "folder" 16 %}</span>
+      <span class="muted">{{ f.name }} /</span> <strong style="color:var(--text-strong)">{{ sub.subpath|default:sub.name }}</strong>
+      <code style="font-size:12px">{{ sub.folder_id }}</code>
+      <span class="pill completed">shared on its own</span>
+      <span class="grow"></span>
+      <span class="muted">{{ sub.stats.files }} file{{ sub.stats.files|pluralize }} received · {{ sub.stats.bytes|filesize }}</span>
+    </div>
+    {% include "cloud/_members_table.html" with folder=sub empty_text="Nobody yet." %}
+  </div>
+  {% endfor %}
   <h2 style="margin-top:14px">Files sent to this folder</h2>
   <div class="table-wrap"><table class="grid">
     <thead><tr><th>File</th><th>From</th><th class="num">Size</th><th>Status</th><th>Sent</th><th>Completed</th></tr></thead>
@@ -65,22 +69,29 @@
   {% endif %}{% endwith %}
 </div>
 {% empty %}
-<div class="card muted">No folders yet.</div>
+<div class="card muted">No workspaces yet. Create one in the FileJet app (Workspaces &gt; +).</div>
 {% endfor %}
 
 <h2>Folders shared with me ({{ mine|length }})</h2>
 <div class="table-wrap"><table class="grid">
-  <thead><tr><th>Folder</th><th>Folder ID</th><th>Admin</th><th>My role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Folder</th><th>Folder ID</th><th>Admin</th><th>My role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th>Security</th><th></th></tr></thead>
   <tbody>{% for m in mine %}
     <tr><td class="name">{{ m.folder.name }}</td><td class="mono">{{ m.folder.folder_id }}</td>
       <td>{{ m.folder.owner.label }} <span class="muted">@{{ m.folder.owner.username }}</span></td><td>{{ m.role|title }}</td>
       <td>{{ m.can_read|yesno:"✓,-" }}</td><td>{{ m.can_upload|yesno:"✓,-" }}</td><td>{{ m.can_edit|yesno:"✓,-" }}</td><td>{{ m.can_delete|yesno:"✓,-" }}</td>
       <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+      <td>{% include "cloud/_security.html" %}
+        {% if m.require_otp and not m.otp_verified_at and m.status != "declined" %}
+        <form method="post" style="margin:6px 0 0;display:flex;gap:6px">{% csrf_token %}<input type="hidden" name="folder_id" value="{{ m.folder.folder_id }}">
+          {% if m.otp_channel != "email" and not user.phone %}<a class="btn small secondary" href="{% url 'account' %}">Add mobile number</a>{% else %}
+          <button class="btn small secondary" name="action" value="otp_send">{% if m.otp_channel == "sms" %}Send code by SMS{% elif m.otp_channel == "whatsapp" %}Send code on WhatsApp{% else %}E-mail me a code{% endif %}</button>{% endif %}
+          <input name="code" placeholder="6-digit code" inputmode="numeric" maxlength="6" style="width:110px" aria-label="Code">
+          <button class="btn small" name="action" value="otp_verify">Confirm</button></form>{% endif %}</td>
       <td><form method="post" style="margin:0;display:flex;gap:6px;justify-content:flex-end">{% csrf_token %}<input type="hidden" name="folder_id" value="{{ m.folder.folder_id }}">
         {% if m.status == "active" %}<button class="btn small secondary" name="action" value="leave" onclick="return confirm('Leave this folder? You can accept it again later from this page.')">Leave</button>
         {% else %}<button class="btn small" name="action" value="accept">Accept</button>
         {% if m.status != "declined" %}<button class="btn small secondary" name="action" value="decline" onclick="return confirm('Decline this folder invitation? You can still accept it later.')">Decline</button>{% endif %}{% endif %}</form></td></tr>
-  {% empty %}<tr><td colspan="10" class="empty">No folder has been shared with you.</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="11" class="empty">No folder has been shared with you.</td></tr>{% endfor %}
   </tbody></table></div>
 
 {% if sent %}

@@ -1,0 +1,15 @@
+<div class="table-wrap"><table class="grid">
+    <thead><tr><th>User</th><th>ID</th><th>Role</th><th>View &amp; download</th><th>Upload</th><th>Edit</th><th>Delete</th><th>Status</th><th>Security</th><th>E-mail sent</th><th>Access until</th></tr></thead>
+    <tbody>{% for m in folder.members.all %}
+      <tr><td><span class="user"><span class="avatar">{{ m.user.label|slice:":1"|upper }}</span>{{ m.user.label }}</span> <span class="muted">{{ m.user.email }}</span></td>
+        <td class="mono">{{ m.user.formatted_id }}</td><td>{{ m.role|title }}</td>
+        <td>{% if m.can_read %}<span class="pill completed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_upload %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_edit %}<span class="pill active">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.can_delete %}<span class="pill failed">yes</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+        <td>{% include "cloud/_security.html" %}</td>
+        <td>{{ m.email_sent_at|date:"Y-m-d H:i"|default:"-" }}</td>
+        <td>{{ m.expires_at|date:"Y-m-d"|default:"-" }}{% if m.via_group %} <span class="muted">({{ m.via_group }})</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="11" class="empty">{{ empty_text|default:"No users yet." }}</td></tr>{% endfor %}
+    </tbody></table></div>

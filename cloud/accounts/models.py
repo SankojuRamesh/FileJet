@@ -11,11 +11,26 @@ def generate_public_id() -> str:
     return str(secrets.randbelow(9 * 10 ** 8) + 10 ** 8)          # 9 digits, no leading zero
 
 
+def normalize_phone(value: str) -> str:
+    """'+91 98765-43210' -> '+919876543210'. Empty is allowed. Raises ValueError for anything else."""
+    import re
+    v = re.sub(r"[\s\-().]", "", str(value or ""))
+    if not v:
+        return ""
+    if v.startswith("00"):
+        v = "+" + v[2:]
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", v):
+        raise ValueError("enter the mobile number with the country code, e.g. +91 98765 43210")
+    return v
+
+
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     public_id = models.CharField(max_length=9, unique=True, default=generate_public_id, editable=False)
     display_name = models.CharField(max_length=80, blank=True)
     organization = models.CharField(max_length=120, blank=True)      # shown to users and in e-mails
+    location = models.CharField(max_length=120, blank=True)          # city / country, asked at sign-up
+    phone = models.CharField(max_length=20, blank=True)               # E.164, for SMS / WhatsApp codes
 
     def save(self, *args, **kwargs):
         for attempt in range(5):                                     # regenerate on an ID collision

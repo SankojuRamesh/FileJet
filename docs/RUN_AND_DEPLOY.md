@@ -11,7 +11,7 @@ This guide takes you from a fresh checkout to a running system, step by step:
 | [5. Two PCs on the same network](#5-test-with-two-pcs-on-the-same-network) | Testing between real computers in the office |
 | [6. First use in the app](#6-first-use-in-the-app) | Accounts, users, sharing a folder, sending |
 | [7. Build the installable app](#7-build-the-installable-app-filejetexe) | Making `FileJet.exe` for users |
-| [8. Deploy the server without Docker](#8-deploy-the-server-without-docker-windows-or-linux) | Production on a Windows or Linux server (recommended); **8.0 = iotgateway.live** |
+| [8. Deploy the server without Docker](#8-deploy-the-server-without-docker-windows-or-linux) | Production on a Windows or Linux server (recommended); **8.0 = filejet.live** |
 | [9. Deploy the server with Docker](#9-deploy-the-server-with-docker-optional) | Alternative, if you use Docker |
 | [10. Roll out to users](#10-roll-out-to-users) | Giving FileJet to your team |
 | [11. Operate: update, back up, logs](#11-operate-update-back-up-logs) | Day-2 tasks |
@@ -202,7 +202,7 @@ The servers are **not** inside the exe.
 Optional: preset the cloud URL for your users so they never type it. Users can still change it with
 **Change** on the sign-in screen; you can also set it per PC with an environment variable:
 ```powershell
-setx P2P_CLOUD_URL "http://iotgateway.live/"
+setx P2P_CLOUD_URL "http://filejet.live/"
 ```
 
 ---
@@ -215,8 +215,8 @@ newer Ubuntu, so build on the oldest version you support (e.g. 22.04):
 cd ftp_app
 bash packaging/linux/build_linux.sh            # same built-in servers as the Windows build
 ```
-Output in `dist/`: `FileJet` (single program), `filejet_2.0.0_amd64.deb` (installer with app-menu entry and icon),
-`FileJet-linux-x86_64.tar.gz`. Install on a user's PC: `sudo apt install ./filejet_2.0.0_amd64.deb`.
+Output in `dist/`: `FileJet` (single program), `filejet_2.11.0_amd64.deb` (installer with app-menu entry and icon),
+`FileJet-linux-x86_64.tar.gz`. Install on a user's PC: `sudo apt install ./filejet_2.11.0_amd64.deb`.
 
 Automatic builds: `.github/workflows/build-desktop.yml` builds the Windows exe and the Linux .deb (Ubuntu 22.04) on
 GitHub – *Actions → Build desktop app → Run workflow*.
@@ -230,23 +230,23 @@ One program, **`serve.py`**, runs the cloud and the signaling server together an
 
 Choose the kind of deployment:
 
-| | **A. Office network** (LAN) | **B. Internet with a domain** (e.g. iotgateway.live) |
+| | **A. Office network** (LAN) | **B. Internet with a domain** (e.g. filejet.live) |
 |---|---|---|
-| Users reach the server by | its IP, e.g. `http://192.168.1.20:8000/` | the domain, e.g. `http://iotgateway.live/` |
+| Users reach the server by | its IP, e.g. `http://192.168.1.20:8000/` | the domain, e.g. `http://filejet.live/` |
 | Needs a domain | no | yes (HTTP; optional HTTPS with `--https` / `-Https`) |
 | Ports to open on the server | TCP 8000, 8765, 8766 | TCP 80, 8766 (443 only with HTTPS) |
 | Installer option | `-Address` / `--address` (or nothing = auto-detect) | `-Domain` / `--domain` |
 
 Server size: 1 CPU / 1 GB RAM is enough for hundreds of users – files do **not** pass through the server.
 
-### 8.0 Your server: iotgateway.live (AWS, Ubuntu, nginx) – plain HTTP
+### 8.0 Your server: filejet.live (AWS, Ubuntu, nginx) – plain HTTP
 
 | | |
 |---|---|
-| Domain | **iotgateway.live** → `13.204.80.52` |
-| Cloud URL for the app | **http://iotgateway.live/** (the app's default) |
-| Signaling server | **ws://iotgateway.live:8765/ws** – health check: http://iotgateway.live:8765/healthz |
-| Web dashboard | http://iotgateway.live/ |
+| Domain | **filejet.live** → `13.204.80.52` |
+| Cloud URL for the app | **http://filejet.live/** (the app's default) |
+| Signaling server | **ws://filejet.live:8765/ws** – health check: http://filejet.live:8765/healthz |
+| Web dashboard | http://filejet.live/ |
 
 **1. AWS security group** (EC2 → instance → *Security* → security group → *Edit inbound rules*) – allow:
 
@@ -267,21 +267,21 @@ sudo ss -ltnp | grep -E ':8000|:8765'      # shows what is running there
 **3. Install FileJet** (copy the project to the server first, e.g. `scp -r ftp_app ubuntu@13.204.80.52:~/`):
 ```bash
 cd ~/ftp_app
-sudo bash deploy/linux/install.sh --domain iotgateway.live
+sudo bash deploy/linux/install.sh --domain filejet.live
 ```
 The installer runs Django + signaling as the service **`mediarush`** (production mode, new random secrets) and,
 because nginx is installed, configures the nginx site **`mediarush`** (`deploy/nginx/mediarush.conf`): `/ws` and
-`/healthz` → signaling server, everything else → Django. Other enabled nginx sites for iotgateway.live are disabled
+`/healthz` → signaling server, everything else → Django. Other enabled nginx sites for filejet.live are disabled
 (backup kept).
 
 **4. Check**
 ```bash
-curl http://iotgateway.live:8765/healthz       # {"ok":true,...}            <- signaling server
-curl http://iotgateway.live/api/config/        # "signaling_url":"ws://iotgateway.live:8765/ws"
+curl http://filejet.live:8765/healthz       # {"ok":true,...}            <- signaling server
+curl http://filejet.live/api/config/        # "signaling_url":"ws://filejet.live:8765/ws"
 systemctl status mediarush nginx
 ```
 
-**5. Apps:** FileJet uses `http://iotgateway.live/` by default – just create an account and sign in.
+**5. Apps:** FileJet uses `http://filejet.live/` by default – just create an account and sign in.
 
 > Plain HTTP: sign-in passwords and tokens travel unencrypted between the apps and the server. File data and chat
 > are still encrypted end-to-end between the PCs. To add HTTPS later: run the installer again with `--https`.
@@ -299,7 +299,7 @@ systemctl status mediarush nginx
 
    # B. internet with your domain (point the domain's DNS A record to this server first)
    winget install CaddyServer.Caddy          # web proxy, once
-   powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
+   powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain filejet.live
    ```
 4. The installer:
    - copies the server to **`C:\FileJet`** and installs its Python packages,
@@ -338,7 +338,7 @@ Manage it (Administrator PowerShell):
    sudo bash deploy/linux/install.sh
 
    # B. internet with your domain (DNS A record -> this server first); nginx if installed, else Caddy
-   sudo bash deploy/linux/install.sh --domain iotgateway.live
+   sudo bash deploy/linux/install.sh --domain filejet.live
    ```
 3. The installer copies the server to **`/opt/mediarush`**, writes **`/opt/mediarush/server.env`** with random secrets,
    creates the database in `/opt/mediarush/data`, installs the systemd service **`mediarush`** (starts at boot,
@@ -361,7 +361,7 @@ Manage it:
 ### 8.3 Verify (both)
 
 Open in a browser (use your Cloud URL):
-- `http://192.168.1.20:8000/` or `http://iotgateway.live/` → FileJet sign-in page
+- `http://192.168.1.20:8000/` or `http://filejet.live/` → FileJet sign-in page
 - add `api/config/` to the URL → shows the `signaling_url`
 
 Then in the FileJet app: sign-in screen → **Change** → enter the Cloud URL → create an account.
@@ -391,7 +391,7 @@ then restart the server (Windows: stop + start the task; Linux: `sudo systemctl 
 | `DJANGO_ALLOWED_HOSTS` | Names/IPs users use to reach the server (comma separated). |
 | `DJANGO_HTTPS` | `0` = plain HTTP (default), `1` only if the site has an HTTPS certificate. |
 | `CLOUD_PUBLIC_URL` | The Cloud URL (used for links in e-mails). |
-| `P2P_SIGNALING_URL` | `ws://IP:8765/ws` (office) or `ws://iotgateway.live:8765/ws` (domain, the default). The app gets it from the cloud. |
+| `P2P_SIGNALING_URL` | `ws://IP:8765/ws` (office) or `ws://filejet.live:8765/ws` (domain, the default). The app gets it from the cloud. |
 | `DJANGO_SQLITE_PATH` / `DATABASE_URL` | SQLite file (default) or PostgreSQL `postgres://user:pass@host:5432/db`. |
 | `CLOUD_PORT`, `SIGNAL_PORT`, `REFLECTOR_PORT` | 8000 / 8765 / 8766. |
 | `EMAIL_*`, `DEFAULT_FROM_EMAIL`, `SHOW_EMAIL_OUTBOX` | E-mail, see 8.4. |
@@ -404,17 +404,39 @@ then restart the server (Windows: stop + start the task; Linux: `sudo systemctl 
 
 Check the settings without starting the server: `python serve.py --env server.env --check`.
 
+### 8.6 One-time codes by SMS or WhatsApp
+
+When you share a folder you can ask for a one-time code (OTP) by **e-mail, SMS or WhatsApp**. E-mail uses
+the e-mail settings above. SMS and WhatsApp need a provider. Set these in `server.env` or in the environment
+gunicorn runs with:
+
+| Setting | Meaning |
+|---|---|
+| `P2P_SMS_PROVIDER` | `twilio`, `webhook`, or `console` (development only: the code goes to the server log and `/inbox/`). Not set = SMS/WhatsApp switched off. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | From the Twilio console. |
+| `TWILIO_SMS_FROM` | Your Twilio phone number for SMS, e.g. `+15017122661`. |
+| `TWILIO_WHATSAPP_FROM` | Your WhatsApp sender number, e.g. `+14155238886` (Twilio sandbox) or your approved business number. |
+| `P2P_OTP_WEBHOOK_URL` | With `webhook`: any gateway URL. It receives `POST` JSON `{"channel": "sms" or "whatsapp", "to": "+91...", "text": "...", "code": "123456"}`. |
+| `P2P_OTP_WEBHOOK_TOKEN` | Optional, sent as `Authorization: Bearer <token>`. |
+
+Notes:
+- Users add their **mobile number with the country code** under *Account* (app or website).
+- **India SMS:** operators require DLT registration of the sender and the message template. Use a DLT-registered
+  sender with Twilio, or an Indian gateway (e.g. MSG91, Fast2SMS) through the `webhook` option.
+- **WhatsApp:** outside the Twilio sandbox, WhatsApp only delivers business-initiated messages that use an
+  approved *authentication* template. Register one with your provider first.
+
 ---
 
 ## 9. Deploy the server with Docker (optional)
 
-Result: `http://iotgateway.live/` serves the web dashboard + API, `ws://iotgateway.live/ws`
+Result: `http://filejet.live/` serves the web dashboard + API, `ws://filejet.live/ws`
 the signaling server, behind Caddy (plain HTTP) with PostgreSQL.
 
 ### 9.1 What you need
 - A Linux server (VPS) with a **public IP** – 1 vCPU / 1 GB RAM is enough for hundreds of users
   (files do not pass through it).
-- A **domain name**, e.g. `iotgateway.live`, with an **A record** pointing to the server IP.
+- A **domain name**, e.g. `filejet.live`, with an **A record** pointing to the server IP.
 - **Docker** + **Docker Compose plugin** on the server:
   ```bash
   curl -fsSL https://get.docker.com | sh
@@ -441,12 +463,12 @@ nano .env
 Fill in `.env`:
 | Variable | Value |
 |---|---|
-| `P2P_DOMAIN` | `iotgateway.live` |
+| `P2P_DOMAIN` | `filejet.live` |
 | `DJANGO_SECRET_KEY` | random secret #1 |
 | `P2P_CLOUD_JWT_SECRET` | random secret #2 (shared by cloud + signaling automatically) |
 | `POSTGRES_PASSWORD` | random secret #3 |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` | your SMTP account |
-| `DEFAULT_FROM_EMAIL` | e.g. `FileJet <no-reply@iotgateway.live>` |
+| `DEFAULT_FROM_EMAIL` | e.g. `FileJet <no-reply@filejet.live>` |
 | `BILLING_PROVIDER` | `dummy` (no payment gateway is included) |
 
 ### 9.4 Start
@@ -458,14 +480,14 @@ docker compose exec cloud python manage.py createsuperuser
 
 ### 9.5 Verify
 ```bash
-curl http://iotgateway.live/healthz           # {"ok":true,...}  (signaling via Caddy)
-curl http://iotgateway.live/api/config/       # {"signaling_url":"ws://iotgateway.live/ws",...}
+curl http://filejet.live/healthz           # {"ok":true,...}  (signaling via Caddy)
+curl http://filejet.live/api/config/       # {"signaling_url":"ws://filejet.live/ws",...}
 ```
-Open `http://iotgateway.live/` in a browser → FileJet sign-in page.
-Admin area: `http://iotgateway.live/admin/`.
+Open `http://filejet.live/` in a browser → FileJet sign-in page.
+Admin area: `http://filejet.live/admin/`.
 
 ### 9.6 Connect the apps
-In FileJet: sign-in screen → **Change** → `http://iotgateway.live/` → create account / sign in.
+In FileJet: sign-in screen → **Change** → `http://filejet.live/` → create account / sign in.
 The status bar should show **● Online**.
 
 ---
@@ -473,7 +495,7 @@ The status bar should show **● Online**.
 ## 10. Roll out to users
 
 1. Build `FileJet.exe` ([section 7](#7-build-the-installable-app-filejetexe)) and share it (file share, intranet, e-mail link).
-2. Tell users the **cloud URL** (`http://iotgateway.live/`, the app's default) – they enter it once via **Change** on the
+2. Tell users the **cloud URL** (`http://filejet.live/`, the app's default) – they enter it once via **Change** on the
    sign-in screen (or set `P2P_CLOUD_URL` for them).
 3. Each user creates an account and sends their **ID** to whoever shares folders with them.
 4. First transfer: allow FileJet in the Windows firewall prompt.

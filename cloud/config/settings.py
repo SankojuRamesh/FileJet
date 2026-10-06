@@ -26,7 +26,7 @@ if not DEBUG and SECRET_KEY.startswith("dev-insecure"):
 
 # Public domain of this deployment. Production defaults below are derived from it; every value can still be
 # overridden by its own environment variable. Development (DJANGO_DEBUG=1) keeps using 127.0.0.1.
-DOMAIN = os.environ.get("P2P_DOMAIN", "iotgateway.live")
+DOMAIN = os.environ.get("P2P_DOMAIN", "filejet.live")
 # Served over HTTPS? Default: plain HTTP (http://DOMAIN/, ws://DOMAIN/ws). Set DJANGO_HTTPS=1 if a certificate
 # is added later - then secure cookies, HSTS and https/wss URLs are used.
 HTTPS = os.environ.get("DJANGO_HTTPS", "0") == "1"          # this deployment runs on plain HTTP
@@ -63,6 +63,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "support.superadmin.SuperadminOnlyAdminMiddleware",      # platform admin: staff console only
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -134,7 +135,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": ["support.superadmin.NoSharingForSuperadmin"],   # signed in; no sharing for the platform admin
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -170,7 +171,7 @@ SIGNAL_TOKEN_TTL = int(os.environ.get("P2P_SIGNAL_TOKEN_TTL", 3600))
 SIGNAL_PORT = int(os.environ.get("P2P_SIGNAL_PORT", 8765))
 P2P_SIGNALING_URL = os.environ.get("P2P_SIGNALING_URL",
                                    f"wss://{DOMAIN}/ws" if HTTPS else f"ws://{DOMAIN}:{SIGNAL_PORT}/ws")
-BILLING_PROVIDER = os.environ.get("BILLING_PROVIDER", "dummy")
+BILLING_PROVIDER = os.environ.get("BILLING_PROVIDER", "dummy")   # not used any more: set in the staff console
 CLOUD_PUBLIC_URL = os.environ.get("CLOUD_PUBLIC_URL", "http://127.0.0.1:8000/" if DEBUG else f"{_SCHEME}://{DOMAIN}/")
 
 # E-mail (folder invitations). Development: printed to the console AND visible under "Inbox" in the

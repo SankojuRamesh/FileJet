@@ -139,9 +139,11 @@ class CloudClient:
         self._save()
         return self.user
 
-    def register(self, username: str, email: str, password: str, display_name: str = "") -> dict:
+    def register(self, username: str, email: str, password: str, display_name: str = "", organization: str = "",
+                 location: str = "") -> dict:
         status, payload = self._raw("POST", "api/auth/register/", {
-            "username": username, "email": email, "password": password, "display_name": display_name})
+            "username": username, "email": email, "password": password, "display_name": display_name,
+            "organization": organization, "location": location})
         if status != 201:
             raise CloudError(self._message(payload), status)
         with self._lock:
@@ -268,6 +270,15 @@ class CloudClient:
 
     def join_folder(self, folder_id: str) -> dict:
         return self.request("POST", "api/folders/join/", {"folder_id": folder_id})
+
+    def update_me(self, data: dict) -> dict:
+        return self.request("PATCH", "api/me/", data)
+
+    def send_folder_code(self, folder_id: str) -> dict:
+        return self.request("POST", f"api/folders/{folder_id}/otp/send/", {})
+
+    def verify_folder_code(self, folder_id: str, code: str) -> dict:
+        return self.request("POST", f"api/folders/{folder_id}/otp/verify/", {"code": code})
 
     def decline_folder(self, folder_id: str) -> dict:
         return self.request("POST", "api/folders/decline/", {"folder_id": folder_id})

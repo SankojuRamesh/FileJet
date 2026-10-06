@@ -61,3 +61,20 @@ def filesize(n):
         if n < 1000 or unit == "PB":
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1000
+
+
+CURRENCY = {"INR": "\u20b9", "USD": "$", "EUR": "\u20ac", "GBP": "\u00a3", "AED": "AED ", "SGD": "S$", "AUD": "A$"}
+
+
+@register.filter
+def money(amount, currency="USD"):
+    """12.5, "INR" -> "₹12.50";  499, "INR" -> "₹499"."""
+    if amount in (None, ""):
+        return "-"
+    try:
+        value = float(amount)
+    except (TypeError, ValueError):
+        return str(amount)
+    sym = CURRENCY.get(str(currency or "USD").upper(), f"{str(currency).upper()} ")
+    text = f"{value:,.0f}" if value == int(value) else f"{value:,.2f}"
+    return f"{sym}{text}"

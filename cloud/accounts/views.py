@@ -17,6 +17,10 @@ class RegisterForm(forms.Form):
                                 error_messages={"invalid": "3-30 characters: letters, digits, . _ -"})
     email = forms.EmailField()
     display_name = forms.CharField(max_length=80, required=False)
+    organization = forms.CharField(max_length=120, label="Organization",
+                                   widget=forms.TextInput(attrs={"placeholder": "Company, team or 'Individual'"}))
+    location = forms.CharField(max_length=120, label="Location",
+                               widget=forms.TextInput(attrs={"placeholder": "City, Country"}))
     password = forms.CharField(widget=forms.PasswordInput)
     password2 = forms.CharField(widget=forms.PasswordInput, label="Repeat password")
 
@@ -44,7 +48,16 @@ class RegisterForm(forms.Form):
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ["display_name", "organization", "email"]
+        fields = ["display_name", "organization", "location", "email", "phone"]
+        labels = {"phone": "Mobile number (for SMS / WhatsApp codes)"}
+        widgets = {"phone": forms.TextInput(attrs={"placeholder": "+91 98765 43210", "inputmode": "tel"})}
+
+    def clean_phone(self):
+        from .models import normalize_phone
+        try:
+            return normalize_phone(self.cleaned_data.get("phone", ""))
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from None
 
 
 def register(request):
@@ -55,7 +68,8 @@ def register(request):
         from billing.services import get_subscription
         d = form.cleaned_data
         user = User.objects.create_user(username=d["username"], email=d["email"], password=d["password"],
-                                        display_name=d.get("display_name", ""))
+                                        display_name=d.get("display_name", ""),
+                                        organization=d["organization"].strip(), location=d["location"].strip())
         get_subscription(user)
         login(request, user, backend="accounts.backends.EmailOrUsernameBackend")
         messages.success(request, f"Welcome, {user.label}! Your ID is {user.formatted_id}.")

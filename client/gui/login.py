@@ -38,11 +38,14 @@ class LoginDialog(QDialog):
         self.username = QLineEdit(placeholderText="Username or e-mail")
         self.email = QLineEdit(placeholderText="you@example.com")
         self.display = QLineEdit(placeholderText="Shown to your contacts")
+        self.org = QLineEdit(placeholderText="Company, team or 'Individual'")
+        self.location = QLineEdit(placeholderText="City, Country")
         self.password = QLineEdit(placeholderText="Password", echoMode=QLineEdit.Password)
         self.password2 = QLineEdit(placeholderText="Repeat password", echoMode=QLineEdit.Password)
         self.rows = {}
         for key, text, w in (("username", "Username", self.username), ("email", "E-mail", self.email),
-                             ("display", "Display name", self.display), ("password", "Password", self.password),
+                             ("display", "Display name", self.display), ("org", "Organization", self.org),
+                             ("location", "Location", self.location), ("password", "Password", self.password),
                              ("password2", "Repeat", self.password2)):
             lb = QLabel(text)
             form.addRow(lb, w)
@@ -71,7 +74,7 @@ class LoginDialog(QDialog):
 
     def _apply_mode(self):
         reg = self.mode == "register"
-        for key in ("email", "display", "password2"):
+        for key in ("email", "display", "org", "location", "password2"):
             for w in self.rows[key]:
                 w.setVisible(reg)
         self.rows["username"][0].setText("Username" if reg else "Username or e-mail")
@@ -109,7 +112,12 @@ class LoginDialog(QDialog):
                 self.error.setText("Passwords do not match.")
                 return
             email, display = self.email.text().strip(), self.display.text().strip()
-            job = lambda: self.core.register(user, email, pw, display)     # noqa: E731
+            org, location = self.org.text().strip(), self.location.text().strip()
+            if not org or not location:
+                self.error.setText("Enter your organization and location.")
+                (self.org if not org else self.location).setFocus()
+                return
+            job = lambda: self.core.register(user, email, pw, display, org, location)     # noqa: E731
         else:
             job = lambda: self.core.login(user, pw)                        # noqa: E731
         self._busy(True)

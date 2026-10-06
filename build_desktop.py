@@ -1,7 +1,7 @@
 """Build the standalone desktop app with PyInstaller (run on each target OS).
 
     pip install -r requirements.txt pyinstaller
-    python build_desktop.py                                        # cloud: http://iotgateway.live/
+    python build_desktop.py                                        # cloud: http://filejet.live/
     python build_desktop.py --cloud-url http://192.168.1.20:8000/  # a build for another server
     python build_desktop.py --signal-url ""                        # signaling address: ask the cloud (automatic)
 
@@ -14,9 +14,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_CLOUD_URL = "http://iotgateway.live/"
+DEFAULT_CLOUD_URL = "http://filejet.live/"
 # Signaling server the app connects to. Empty = use what the cloud announces (GET /api/config/).
-DEFAULT_SIGNAL_URL = "ws://iotgateway.live:8765/ws"
+DEFAULT_SIGNAL_URL = "ws://filejet.live:8765/ws"
 _QT_APP = None
 EXCLUDE = ["server", "cloud", "django", "rest_framework", "fastapi", "starlette", "uvicorn", "pydantic",
            "httpx", "pytest", "tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore",

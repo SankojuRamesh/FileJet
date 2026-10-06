@@ -1,0 +1,55 @@
+{% load cloud_ui %}<div class="rel-grid">
+  <div class="rel-box">
+    <h3>Added by <span class="muted">({{ r.added_by|length }})</span></h3>
+    {% for l in r.added_by %}
+      <div class="rel-line"><a href="{% url 'staff_user' l.admin.pk %}">{{ l.admin.label }}</a> <span class="muted">@{{ l.admin.username }}</span>
+        {% if l.note %}<span class="pill paused">{{ l.note }}</span>{% endif %}<span class="muted"> · {{ l.created_at|date:"Y-m-d" }}</span></div>
+    {% empty %}<div class="muted">Nobody added this user.</div>{% endfor %}
+  </div>
+  <div class="rel-box">
+    <h3>Users they added <span class="muted">({{ r.added|length }})</span></h3>
+    {% for l in r.added %}
+      <div class="rel-line"><a href="{% url 'staff_user' l.client.pk %}">{{ l.client.label }}</a> <span class="muted">@{{ l.client.username }}</span>
+        {% if l.note %}<span class="pill paused">{{ l.note }}</span>{% endif %}<span class="muted"> · {{ l.created_at|date:"Y-m-d" }}</span></div>
+    {% empty %}<div class="muted">None.</div>{% endfor %}
+    {% if r.groups %}<h3 style="margin-top:10px">Groups</h3>
+      {% for g in r.groups %}<div class="rel-line">{% icon "users" 13 %} <b>{{ g.name }}</b>
+        <span class="muted">– {% for m in g.members.all %}{{ m.label }}{% if not forloop.last %}, {% endif %}{% empty %}empty{% endfor %}</span></div>{% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="rel-box" style="margin-top:12px">
+  <h3>Workspaces <span class="muted">({{ r.workspaces|length }} · {{ r.shared_n }} folder{{ r.shared_n|pluralize }} shared on {{ r.shared_n|pluralize:"its,their" }} own)</span></h3>
+  {% for w in r.workspaces %}
+    <div class="rel-ws">
+      <div class="rel-line"><span style="color:var(--folder)">{% icon "folder" 14 %}</span> <b>{{ w.name }}</b> <code>{{ w.folder_id }}</code>
+        <span class="pill {% if w.kind == 'submit' %}paused{% else %}active{% endif %}">{{ w.get_kind_display }}</span>
+        <span class="muted">· created {{ w.created_at|date:"Y-m-d" }}</span></div>
+      {% include "support/_relations_members.html" with folder=w %}
+      {% for s in w.subs %}
+        <div class="rel-sub">
+          <div class="rel-line"><span style="color:var(--folder)">{% icon "folder" 13 %}</span> <span class="muted">{{ w.name }} /</span> <b>{{ s.subpath|default:s.name }}</b> <code>{{ s.folder_id }}</code>
+            <span class="pill completed">shared on its own</span></div>
+          {% include "support/_relations_members.html" with folder=s %}
+        </div>
+      {% endfor %}
+    </div>
+  {% empty %}<div class="muted">No workspaces.</div>{% endfor %}
+</div>
+
+<div class="rel-box" style="margin-top:12px">
+  <h3>Folders shared with them <span class="muted">({{ r.member_of|length }})</span></h3>
+  {% if r.member_of %}
+  <div class="table-wrap"><table class="grid">
+    <thead><tr><th>Folder</th><th>Owner</th><th>Role</th><th>Permissions</th><th>Status</th><th>Access until</th></tr></thead>
+    <tbody>{% for m in r.member_of %}
+      <tr><td>{% if m.folder.parent %}<span class="muted">{{ m.folder.parent.name }} /</span> {% endif %}<b>{{ m.folder.name }}</b> <code>{{ m.folder.folder_id }}</code></td>
+        <td><a href="{% url 'staff_user' m.folder.owner.pk %}">{{ m.folder.owner.label }}</a></td>
+        <td>{{ m.role|title }}{% if m.via_group %} <span class="muted">({{ m.via_group }})</span>{% endif %}</td>
+        <td>{% include "support/_relations_perms.html" %}</td>
+        <td>{% if m.status == "active" %}<span class="pill completed">joined</span>{% elif m.status == "declined" %}<span class="pill failed">declined</span>{% else %}<span class="pill paused">invited</span>{% endif %}</td>
+        <td>{{ m.expires_at|date:"Y-m-d"|default:"—" }}</td></tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<div class="muted">Nothing is shared with this user.</div>{% endif %}
+</div>

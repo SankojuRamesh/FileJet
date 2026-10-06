@@ -1,0 +1,4 @@
+<div class="rel-members">{% for m in folder.members.all %}
+  <span class="rel-chip" title="{{ m.role|title }} · {{ m.status }}"><a href="{% url 'staff_user' m.user.pk %}">{{ m.user.label }}</a>
+    <span class="muted">{{ m.role|title }}</span>{% include "support/_relations_perms.html" %}{% if m.status != "active" %} <span class="pill {% if m.status == 'declined' %}failed{% else %}paused{% endif %}">{{ m.status }}</span>{% endif %}</span>
+{% empty %}<span class="muted">Not shared with anyone.</span>{% endfor %}</div>

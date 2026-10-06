@@ -178,13 +178,15 @@ def default_data_dir(app: str) -> Path:
 try:                                   # written by build_desktop.py --cloud-url ... --signal-url ...
     from ..build_info import CLOUD_URL as DEFAULT_CLOUD_URL
 except ImportError:
-    DEFAULT_CLOUD_URL = "http://iotgateway.live/"   # FileJet cloud (change with "Change" on the sign-in screen)
+    DEFAULT_CLOUD_URL = "http://filejet.live/"      # FileJet cloud (change with "Change" on the sign-in screen)
 try:
     from ..build_info import SIGNAL_URL as DEFAULT_SIGNAL_URL
 except ImportError:
     DEFAULT_SIGNAL_URL = ""                         # "" = the address the cloud announces
 # addresses older builds saved as their default - an installed app moves to DEFAULT_CLOUD_URL
-_OLD_DEFAULTS = ("http://127.0.0.1:8000/", "http://localhost:8000/", "https://iotgateway.live/")
+_OLD_DEFAULTS = ("http://127.0.0.1:8000/", "http://localhost:8000/", "https://iotgateway.live/",
+                 "http://iotgateway.live/")                          # old domain -> filejet.live
+_OLD_SIGNAL = ("ws://iotgateway.live:8765/ws", "ws://iotgateway.live/ws")
 
 
 def load_settings(data_dir: Path) -> dict:
@@ -201,6 +203,8 @@ def load_settings(data_dir: Path) -> dict:
         pass
     if getattr(sys, "frozen", False) and s.get("cloud_url") in _OLD_DEFAULTS and "P2P_CLOUD_URL" not in os.environ:
         s["cloud_url"] = DEFAULT_CLOUD_URL
+    if s.get("server_override") in _OLD_SIGNAL:
+        s["server_override"] = DEFAULT_SIGNAL_URL if frozen else ""   # old domain's signaling server
     if getattr(sys, "frozen", False) and DEFAULT_SIGNAL_URL and not s.get("server_override"):
         s["server_override"] = DEFAULT_SIGNAL_URL      # settings saved by an older build: use this build's server
     return s

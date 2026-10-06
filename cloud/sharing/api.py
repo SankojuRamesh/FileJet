@@ -132,6 +132,25 @@ class JoinView(APIView):
 
 
 
+class OtpSendView(APIView):
+    throttle_scope = "support"                               # also limited per code (resend after 60 s)
+
+    def post(self, request, folder_id):
+        try:
+            return Response(services.send_otp(request.user, folder_id))
+        except ServiceError as exc:
+            return _err(exc)
+
+
+class OtpVerifyView(APIView):
+    def post(self, request, folder_id):
+        try:
+            m = services.verify_otp(request.user, folder_id, str(request.data.get("code", "")))
+        except ServiceError as exc:
+            return _err(exc)
+        return Response({"ok": True, "security": m.security()})
+
+
 class DeclineView(APIView):
     def post(self, request):
         try:

@@ -21,6 +21,8 @@ api_urlpatterns = [
     path("groups/<int:pk>/", api.GroupDetailView.as_view()),
     path("<str:folder_id>/", api.FolderDetailView.as_view()),
     path("<str:folder_id>/members/", api.MembersView.as_view()),
+    path("<str:folder_id>/otp/send/", api.OtpSendView.as_view()),
+    path("<str:folder_id>/otp/verify/", api.OtpVerifyView.as_view()),
     path("<str:folder_id>/members/<int:pk>/", api.MemberDetailView.as_view()),
     path("<str:folder_id>/members/<int:pk>/resend/", api.ResendView.as_view()),
     path("<str:folder_id>/groups/", api.FolderGroupView.as_view()),

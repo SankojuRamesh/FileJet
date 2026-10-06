@@ -5,7 +5,7 @@
 <h1>Users &amp; subscriptions</h1>
 {% include "support/_staff_tabs.html" %}
 <form class="toolbar" method="get">
-  <input name="q" value="{{ q }}" placeholder="Search name, e-mail, ID, organization" style="width:300px" aria-label="Search">
+  <input name="q" value="{{ q }}" placeholder="Search name, e-mail, ID, organization, location" style="width:300px" aria-label="Search">
   <select name="plan" aria-label="Plan"><option value="">All plans</option>{% for p in plans %}<option value="{{ p.code }}"{% if p.code == plan %} selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
   <select name="expiring" aria-label="Expiring"><option value="">Any expiry</option>
     <option value="7"{% if expiring == "7" %} selected{% endif %}>Expires within 7 days</option>
@@ -14,16 +14,16 @@
   <span class="grow"></span><span class="muted">{{ total }} user{{ total|pluralize }}</span>
 </form>
 <div class="table-wrap"><table class="grid">
-  <thead><tr><th>User</th><th>E-mail</th><th>ID</th><th>Organization</th><th>Plan</th><th>Status</th><th>Expires</th><th class="num">Days left</th><th class="num">Devices</th><th>Joined</th><th>Last sign-in</th></tr></thead>
+  <thead><tr><th>User</th><th>E-mail</th><th>ID</th><th>Organization</th><th>Location</th><th>Plan</th><th>Status</th><th>Expires</th><th class="num">Days left</th><th class="num">Devices</th><th>Joined</th><th>Last sign-in</th></tr></thead>
   <tbody>{% for r in rows %}
     <tr><td class="name"><a href="{% url 'staff_user' r.u.pk %}">{{ r.u.label }}</a> <span class="muted">@{{ r.u.username }}</span>{% if not r.u.is_active %} <span class="pill failed">disabled</span>{% endif %}</td>
-      <td>{{ r.u.email }}</td><td class="mono">{{ r.u.formatted_id }}</td><td>{{ r.u.organization|default:"—" }}</td>
+      <td>{{ r.u.email }}</td><td class="mono">{{ r.u.formatted_id }}</td><td>{{ r.u.organization|default:"—" }}</td><td>{{ r.u.location|default:"—" }}</td>
       <td>{{ r.sub.plan.name|default:"Free" }}</td>
       <td>{% if r.sub %}<span class="pill {% if r.sub.status == 'active' %}completed{% else %}failed{% endif %}">{{ r.sub.get_status_display }}</span>{% if r.sub.cancel_at_period_end %} <span class="pill paused">ends</span>{% endif %}{% else %}—{% endif %}</td>
       <td>{{ r.end|date:"Y-m-d"|default:"—" }}</td>
       <td class="num">{% if r.days is not None %}<span class="{% if r.days < 7 %}warn{% endif %}">{{ r.days }}</span>{% else %}—{% endif %}</td>
       <td class="num">{{ r.u.devices_n }}</td>
       <td>{{ r.u.date_joined|date:"Y-m-d" }}</td><td>{{ r.u.last_login|date:"Y-m-d H:i"|default:"—" }}</td></tr>
-  {% empty %}<tr><td colspan="11" class="empty">No users found.</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="12" class="empty">No users found.</td></tr>{% endfor %}
   </tbody></table></div>
 {% endblock %}

@@ -9,7 +9,7 @@
     <div style="flex:1;min-width:260px">
       <div class="muted">Current plan</div>
       <div style="font-size:22px;color:var(--text-strong)">{{ sub.plan.name }}
-        {% if sub.cancel_at_period_end %}<span class="pill paused">ends {{ sub.current_period_end|date:"Y-m-d" }}</span>{% endif %}</div>
+        {% if sub.cancel_at_period_end and sub.plan.price_month %}<span class="pill paused">paid until {{ sub.current_period_end|date:"Y-m-d" }}</span>{% endif %}</div>
       <div class="muted">Period {{ sub.current_period_start|date:"Y-m-d" }} → {{ sub.current_period_end|date:"Y-m-d" }}</div>
     </div>
     <div style="flex:1;min-width:260px">
@@ -23,25 +23,43 @@
 <h2>Plans</h2>
 <div class="plans">
 {% for p in plans %}
-  <div class="plan {% if p.pk == sub.plan_id %}current{% endif %}">
+  <div class="plan {% if p.pk == sub.plan_id %}current{% endif %}{% if p.code == chosen %} chosen{% endif %}">
     <strong>{{ p.name }}</strong>
-    <div class="price">{% if p.price_month %}${{ p.price_month }}<span class="muted" style="font-size:13px"> / month</span>{% else %}Free{% endif %}</div>
+    <div class="price">{% if p.price_month %}{{ p.price_month|money:p.currency }}<span class="muted" style="font-size:13px"> / {{ period_days }} days</span>{% else %}Free{% endif %}</div>
     <div class="muted">{{ p.description }}</div>
     <ul>
       <li>Max file size: {{ p.max_file_size|filesize }}</li>
       <li>Monthly transfer: {{ p.monthly_quota|filesize }}</li>
       <li>Users you can add: {{ p.max_users|default_if_none:"Unlimited" }}</li>
-      <li>Folders: {{ p.max_folders|default_if_none:"Unlimited" }}</li>
+      <li>Workspaces / shared folders: {{ p.max_folders|default_if_none:"Unlimited" }}</li>
       <li>Transfers: direct P2P, files never stored in the cloud</li>
     </ul>
     {% if p.pk == sub.plan_id %}
-      {% if p.code != "free" and not sub.cancel_at_period_end %}
-      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="cancel"><button class="btn secondary" style="width:100%;justify-content:center">Cancel at period end</button></form>
+      {% if p.price_month and payments_on %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pay"><input type="hidden" name="plan" value="{{ p.code }}">
+          <button class="btn" style="width:100%;justify-content:center">Renew – add {{ period_days }} days</button></form>
+      {% elif p.code != "free" and not sub.cancel_at_period_end %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="cancel"><button class="btn secondary" style="width:100%;justify-content:center">Cancel at period end</button></form>
       {% else %}<button class="btn secondary" disabled style="width:100%;justify-content:center">Current plan</button>{% endif %}
+    {% elif p.price_month and payments_on %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pay"><input type="hidden" name="plan" value="{{ p.code }}">
+        <button class="btn" style="width:100%;justify-content:center">Pay {{ p.price_month|money:p.currency }} – get {{ p.name }}</button></form>
     {% else %}
-      <form method="post">{% csrf_token %}<input type="hidden" name="plan" value="{{ p.code }}"><button class="btn" style="width:100%;justify-content:center">Switch to {{ p.name }}</button></form>
+      <form method="post">{% csrf_token %}<input type="hidden" name="plan" value="{{ p.code }}"><button class="btn{% if not p.price_month %} secondary{% endif %}" style="width:100%;justify-content:center">Switch to {{ p.name }}</button></form>
     {% endif %}
   </div>
 {% endfor %}
 </div>
+{% if payments_on %}<p class="muted" style="margin-top:10px">Payments by Razorpay: UPI, cards, net banking and wallets. Paid plans run for {{ period_days }} days per payment – pay again to extend; otherwise you return to Free.</p>{% endif %}
+
+{% if payments %}
+<h2>Payments</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Date</th><th>Plan</th><th class="num">Amount</th><th>Status</th><th>Paid until</th><th>Payment ID</th></tr></thead>
+  <tbody>{% for pay in payments %}
+    <tr><td>{{ pay.created_at|date:"Y-m-d H:i" }}</td><td>{{ pay.plan.name }}</td><td class="num">{{ pay.amount|money:pay.currency }}</td>
+      <td><span class="pill {% if pay.status == 'paid' %}completed{% elif pay.status == 'failed' %}failed{% else %}paused{% endif %}">{{ pay.get_status_display }}</span></td>
+      <td>{{ pay.period_end|date:"Y-m-d"|default:"—" }}</td><td class="mono">{{ pay.payment_id|default:"—" }}</td></tr>
+  {% endfor %}</tbody></table></div>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,46 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Payment{% endblock %}
+{% block titlebar %}Subscription › Payment{% endblock %}
+{% block content %}
+<h1>Pay for {{ c.plan.name }}</h1>
+<div class="card" style="max-width:520px">
+  <div class="muted">Plan</div>
+  <div style="font-size:20px;color:var(--text-strong)">{{ c.plan.name }}</div>
+  <div class="price" style="font-size:26px;margin:6px 0">{{ c.plan.price_month|money:c.plan.currency }}
+    <span class="muted" style="font-size:13px">for {{ c.days }} days</span></div>
+  <p class="muted" style="margin:0 0 14px">Pay securely with UPI, card, net banking or wallet via Razorpay. Your plan
+    starts as soon as the payment is confirmed. Pay again any time to add another {{ c.days }} days.</p>
+  <div class="toolbar">
+    <button class="btn" id="pay">Pay {{ c.plan.price_month|money:c.plan.currency }}</button>
+    <a class="btn secondary" href="{% url 'subscription' %}">Cancel</a>
+  </div>
+</div>
+<form id="done" method="post" action="{% url 'checkout_done' %}" style="display:none">{% csrf_token %}
+  <input name="razorpay_order_id"><input name="razorpay_payment_id"><input name="razorpay_signature">
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+(function () {
+  const form = document.getElementById("done");
+  const rzp = new Razorpay({
+    key: "{{ c.key_id|escapejs }}", order_id: "{{ c.order_id|escapejs }}",
+    amount: {{ c.amount }}, currency: "{{ c.currency|escapejs }}",
+    name: "{{ c.business_name|escapejs }}", description: "{{ c.plan.name|escapejs }} – {{ c.days }} days",
+    prefill: { name: "{{ user.label|escapejs }}", email: "{{ user.email|escapejs }}", contact: "{{ user.phone|escapejs }}" },
+    theme: { color: "#5b8cff" },
+    handler: function (r) {
+      form.razorpay_order_id.value = r.razorpay_order_id;
+      form.razorpay_payment_id.value = r.razorpay_payment_id;
+      form.razorpay_signature.value = r.razorpay_signature;
+      form.submit();
+    }
+  });
+  rzp.on("payment.failed", function (r) { alert("Payment failed: " + (r.error && r.error.description || "please try again")); });
+  document.getElementById("pay").addEventListener("click", function (e) { e.preventDefault(); rzp.open(); });
+  rzp.open();
+})();
+</script>
+{% endblock %}

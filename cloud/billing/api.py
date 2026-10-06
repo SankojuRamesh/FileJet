@@ -22,6 +22,8 @@ class SubscriptionView(APIView):
     def post(self, request):
         try:
             result = services.change_plan(request.user, str(request.data.get("plan", "")))
+        except services.PaymentRequired as exc:          # paid plan: pay on the web page (the app opens it)
+            return Response({"detail": str(exc), "checkout_url": exc.checkout_url}, status=402)
         except services.BillingError as exc:
             return Response({"detail": str(exc)}, status=400)
         sub = services.get_subscription(request.user)

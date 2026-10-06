@@ -99,6 +99,19 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     PRIMARY KEY (msg_id, peer_uid, outgoing)
 );
 CREATE INDEX IF NOT EXISTS chat_peer ON chat_messages (peer_uid, ts);
+CREATE TABLE IF NOT EXISTS upload_requests (
+    req_id     TEXT PRIMARY KEY,
+    folder_id  TEXT NOT NULL,
+    uid        TEXT NOT NULL,
+    sender     TEXT NOT NULL DEFAULT '',
+    dir        TEXT NOT NULL DEFAULT '',
+    name       TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    state      TEXT NOT NULL DEFAULT 'pending',     -- pending / approved / rejected
+    created_at REAL NOT NULL,
+    decided_at REAL,
+    UNIQUE (folder_id, uid, dir, name, size)
+);
 CREATE TABLE IF NOT EXISTS contact_transfers (
     transfer_id TEXT NOT NULL,
     role        TEXT NOT NULL,
@@ -112,10 +125,20 @@ CREATE TABLE IF NOT EXISTS contact_transfers (
 """
 
 PAGE = 300          # directory entries per encrypted message
+# shown to the sender; deliberately not "permanent" wording so queued uploads keep waiting, not fail
+CODE_NEEDED = "confirm your one-time code first - open the folder in FileJet and enter the code we send you"
+WAIT_APPROVAL = "waiting for the folder admin to accept this upload - it starts by itself once accepted"
+REJECTED = "not allowed: the folder admin rejected this upload"
+
+
+class WaitingError(Exception):
+    """Not a refusal: the request can succeed later (code entered / upload accepted). Sent to the other app
+    as-is, so its outbox keeps the file queued instead of failing it."""
 PERM_KEYS = ("read", "upload", "edit", "delete")
 ROLES = {"uploader": (False, True, False, False), "viewer": (True, False, False, False),
-         "editor": (True, True, True, False), "manager": (True, True, True, True)}
+         "contributor": (True, True, False, False), "editor": (True, True, True, False), "manager": (True, True, True, True)}
 ROLE_TEXT = {"uploader": "Uploader (send files only)", "viewer": "Viewer (view & download)",
+             "contributor": "Contributor (view, download & upload)",
              "editor": "Editor (view, upload, rename)", "manager": "Manager (everything incl. delete)",
              "custom": "Custom"}
 
@@ -138,6 +161,11 @@ class Perms:
         return self.read or self.upload or self.edit or self.delete
 
 
+def _norm(p) -> str:
+    """Comparable absolute path (case-insensitive on Windows)."""
+    return os.path.normcase(str(Path(p).resolve()))
+
+
 def _ts(value) -> float | None:
     if not value:
         return None
@@ -156,7 +184,16 @@ class ShareStore:
         with db._lock:
             db.conn.executescript(SCHEMA)
             for table, col, decl in (("outbox", "thumb", "BLOB"), ("outbox", "thumb_done", "INTEGER DEFAULT 0"),
-                                     ("received_files", "thumb", "BLOB")):
+                                     ("received_files", "thumb", "BLOB"),
+                                     ("folder_members", "require_otp", "INTEGER NOT NULL DEFAULT 0"),
+                                     ("folder_members", "otp_verified", "INTEGER NOT NULL DEFAULT 0"),
+                                     ("folder_members", "approve_uploads", "TEXT NOT NULL DEFAULT 'none'"),
+                                     ("folder_members", "first_approved", "INTEGER NOT NULL DEFAULT 0"),
+                                     ("folder_members", "otp_channel", "TEXT NOT NULL DEFAULT 'email'"),
+                                     ("folder_members", "delete_scope", "TEXT NOT NULL DEFAULT 'own'"),
+                                     ("received_files", "deleted_at", "REAL"),
+                                     ("received_files", "deleted_by", "TEXT"),
+                                     ("outbox", "deleted_at", "REAL")):
                 have = {r[1] for r in db.conn.execute(f"PRAGMA table_info({table})")}
                 if col not in have:
                     db.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
@@ -212,13 +249,80 @@ class ShareStore:
 
     def upsert_member(self, folder_id: str, m: dict) -> None:
         """Store a member as returned by the cloud API."""
-        u, p = m["user"], m["perms"]
+        u, p, sec = m["user"], m["perms"], m.get("security") or {}
         self._q("INSERT OR REPLACE INTO folder_members (folder_id, member_id, uid, username, name, email, role, "
-                "can_read, can_upload, can_edit, can_delete, status, expires_at, via_group) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "can_read, can_upload, can_edit, can_delete, status, expires_at, via_group, require_otp, "
+                "otp_verified, approve_uploads, first_approved, otp_channel, delete_scope) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (folder_id, int(m["id"]), u["public_id"], u["username"], u.get("display_name") or u["username"],
                  u.get("email", ""), m.get("role", "custom"), int(p["read"]), int(p["upload"]), int(p["edit"]),
-                 int(p["delete"]), m.get("status", "invited"), _ts(m.get("expires_at")), m.get("via_group", "")))
+                 int(p["delete"]), m.get("status", "invited"), _ts(m.get("expires_at")), m.get("via_group", ""),
+                 int(bool(sec.get("require_otp"))), int(bool(sec.get("otp_verified"))),
+                 str(sec.get("approve_uploads") or "none"), int(bool(sec.get("first_upload_approved"))),
+                 str(sec.get("otp_channel") or "email"), str(sec.get("delete_scope") or "own")))
+
+    # ---------------------------------------------------------------- who sent which file (for "delete own")
+    def own_paths(self, folder_id: str, uid: str) -> set[str]:
+        rows = self._q("SELECT local_path FROM received_files WHERE folder_id=? AND sender_uid=? AND deleted_at IS NULL",
+                       (folder_id, uid))
+        return {_norm(r[0]) for r in rows}
+
+    def mark_received_deleted(self, folder_id: str, target: Path, by: str) -> None:
+        """Everything received at ``target`` (a file, or all files below a folder) is now deleted."""
+        t = _norm(target)
+        for r in self._q("SELECT transfer_id, local_path FROM received_files WHERE folder_id=? AND deleted_at IS NULL",
+                         (folder_id,)):
+            p = _norm(r[1])
+            if p == t or p.startswith(t + os.sep):
+                self._q("UPDATE received_files SET deleted_at=?, deleted_by=? WHERE transfer_id=?",
+                        (time.time(), by, r[0]))
+
+    def received_moved(self, folder_id: str, old: Path, new: Path) -> None:
+        """A rename keeps the sender's ownership of the file (and of files inside a renamed folder)."""
+        o, n = _norm(old), str(Path(new).resolve())
+        for r in self._q("SELECT transfer_id, local_path FROM received_files WHERE folder_id=?", (folder_id,)):
+            p = _norm(r[1])
+            if p == o or p.startswith(o + os.sep):
+                self._q("UPDATE received_files SET local_path=? WHERE transfer_id=?",
+                        (n + str(Path(r[1]).resolve())[len(o):], r[0]))
+
+    def mark_outbox_deleted(self, folder_id: str, path: str) -> None:
+        """Sender side: my upload at ``path`` (or below it) was deleted from the folder."""
+        path = path.strip("/")
+        for r in self._q("SELECT item_id, remote_dir, rel FROM outbox WHERE folder_id=? AND deleted_at IS NULL",
+                         (folder_id,)):
+            full = f"{r[1]}/{r[2]}".strip("/")
+            if full == path or full.startswith(path + "/"):
+                self._q("UPDATE outbox SET deleted_at=? WHERE item_id=?", (time.time(), r[0]))
+
+    # ---------------------------------------------------------------- uploads that wait for the admin's OK
+    def upload_request(self, folder_id, uid, sender, dir_, name, size) -> dict:
+        rows = self._q("SELECT * FROM upload_requests WHERE folder_id=? AND uid=? AND dir=? AND name=? AND size=?",
+                       (folder_id, uid, dir_, name, int(size)))
+        if rows:
+            return dict(rows[0])
+        import secrets as _secrets
+        rid = _secrets.token_hex(8)
+        self._q("INSERT INTO upload_requests (req_id, folder_id, uid, sender, dir, name, size, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)", (rid, folder_id, uid, sender, dir_, name, int(size), time.time()))
+        return dict(self._q("SELECT * FROM upload_requests WHERE req_id=?", (rid,))[0])
+
+    def upload_requests(self, folder_id: str | None = None, state: str | None = "pending") -> list[dict]:
+        sql, args = "SELECT * FROM upload_requests WHERE 1=1", []
+        if folder_id:
+            sql, args = sql + " AND folder_id=?", args + [folder_id]
+        if state:
+            sql, args = sql + " AND state=?", args + [state]
+        return [dict(r) for r in self._q(sql + " ORDER BY created_at DESC LIMIT 500", args)]
+
+    def decide_request(self, req_id: str, approve: bool) -> dict | None:
+        self._q("UPDATE upload_requests SET state=?, decided_at=? WHERE req_id=?",
+                ("approved" if approve else "rejected", time.time(), req_id))
+        rows = self._q("SELECT * FROM upload_requests WHERE req_id=?", (req_id,))
+        return dict(rows[0]) if rows else None
+
+    def set_first_approved(self, folder_id: str, uid: str) -> None:
+        self._q("UPDATE folder_members SET first_approved=1 WHERE folder_id=? AND uid=?", (folder_id, uid))
 
     def remove_member(self, folder_id: str, uid: str) -> None:
         self._q("DELETE FROM folder_members WHERE folder_id=? AND uid=?", (folder_id, uid))
@@ -505,6 +609,31 @@ def walk(path: Path, root: Path, max_files: int = 20000) -> dict:
     return {"files": files, "dirs": dirs}
 
 
+def list_files_deep(path: Path, root: Path, max_files: int = 50000) -> dict:
+    """Every file below ``path`` (any depth) as list entries named by their path relative to ``path``, for the
+    workspace view. Stops at ``max_files`` and says so with ``truncated``."""
+    root_real = Path(root).resolve()
+    entries = []
+    for dirpath, dirnames, filenames in os.walk(path):
+        dp = Path(dirpath)
+        dirnames[:] = [d for d in dirnames if root_real == (dp / d).resolve() or root_real in (dp / d).resolve().parents]
+        for f in filenames:
+            if f.endswith(METADATA_SUFFIX):
+                continue
+            full = dp / f
+            try:
+                if root_real not in full.resolve().parents:
+                    continue                     # symlink escaping the folder: never shown
+                st = full.stat()
+            except OSError:
+                continue
+            entries.append({"name": full.relative_to(path).as_posix(), "dir": False, "size": st.st_size,
+                            "mtime": st.st_mtime})
+            if len(entries) >= max_files:
+                return {"entries": entries, "truncated": True}
+    return {"entries": entries, "truncated": False}
+
+
 def safe_child(parent: Path, rel_path: str) -> Path:
     """Destination for a received folder item: sanitised components, confined to ``parent``."""
     parts = [sanitize_filename(p) for p in clean_rel(rel_path).split("/") if p]
@@ -545,12 +674,48 @@ class ShareService:
             if m and m["status"] != "active":
                 raise PermissionError("open the folder with its folder ID first")
             raise PermissionError("no access to this folder")
+        m = self.store.member(str(folder_id), uid)
+        if m and m["require_otp"] and not m["otp_verified"]:
+            if hasattr(self.core, "refresh_member_status"):
+                self.core.refresh_member_status()      # they may have just entered the code
+                m = self.store.member(str(folder_id), uid)
+            if m and m["require_otp"] and not m["otp_verified"]:
+                raise WaitingError(CODE_NEEDED)
         if not perms.allows(need):
             label = {"read": "view & download", "mkdir": "upload or edit"}.get(need, need)
             raise PermissionError(f"you do not have {label} permission on '{folder['name']}'")
         if not Path(folder["path"]).is_dir():
             raise FileNotFoundError("the folder is not available on the admin's computer right now")
         return folder, perms
+
+    @staticmethod
+    def _all_mine(path: Path, mine: set, limit: int = 5000) -> bool:
+        """A folder counts as 'theirs' when every file in it was sent by them (and it is not empty)."""
+        n = 0
+        for dirpath, _dirs, files in os.walk(path):
+            for name in files:
+                if name.endswith(METADATA_SUFFIX):
+                    continue
+                n += 1
+                if n > limit or _norm(Path(dirpath) / name) not in mine:
+                    return False
+        return n > 0
+
+    def _check_approval(self, folder: dict, uid: str, dir_: str, name: str, size: int) -> None:
+        m = self.store.member(folder["folder_id"], uid)
+        mode = (m or {}).get("approve_uploads") or "none"
+        if mode == "none" or (mode == "first" and m["first_approved"]):
+            return
+        req = self.store.upload_request(folder["folder_id"], uid, m.get("name") or m.get("username", ""),
+                                        dir_, name, size)
+        if req["state"] == "approved":
+            return
+        if req["state"] == "rejected":
+            raise PermissionError(REJECTED)
+        if hasattr(self.core, "emit"):
+            self.core.emit("approval", {"folder_id": folder["folder_id"], "folder": folder["name"], "name": name,
+                                        "from": m.get("name") or m.get("username", ""), "size": size})
+        raise WaitingError(WAIT_APPROVAL)
 
     @staticmethod
     def _public(folder: dict, perms: Perms) -> dict:
@@ -572,6 +737,12 @@ class ShareService:
             if not target.is_dir():
                 raise NotADirectoryError("not a folder")
             data = list_dir(target, folder["path"], int(p.get("offset", 0)), PAGE)
+            m = self.store.member(folder["folder_id"], uid) or {}
+            if perms.delete and m.get("delete_scope", "own") == "own":
+                mine = self.store.own_paths(folder["folder_id"], uid)
+                for e in data["entries"]:
+                    full = target / e["name"]
+                    e["mine"] = self._all_mine(full, mine) if e["dir"] else _norm(full) in mine
             size = SIZER.peek(folder["path"])
             if size is not None:
                 data["folder_size"], data["folder_files"] = size
@@ -607,6 +778,7 @@ class ShareService:
             if dst.exists():
                 raise FileExistsError("a file with that name already exists")
             src.rename(dst)
+            self.store.received_moved(folder["folder_id"], src, dst)
             side = Path(str(src) + METADATA_SUFFIX)
             if side.exists():
                 side.rename(Path(str(dst) + METADATA_SUFFIX))
@@ -617,13 +789,26 @@ class ShareService:
             target = resolve_in_share(folder["path"], p.get("path", ""))
             if target == Path(folder["path"]).resolve():
                 raise PermissionError("cannot delete the folder itself")
-            if target.is_dir() and not target.is_symlink():
+            m = self.store.member(folder["folder_id"], uid) or {}
+            if m.get("delete_scope", "own") == "own":
+                mine = self.store.own_paths(folder["folder_id"], uid)
+                ok = self._all_mine(target, mine) if target.is_dir() else _norm(target) in mine
+                if not ok:
+                    raise PermissionError("you can only delete files you sent to this folder")
+            who = m.get("name") or m.get("username") or uid
+            is_dir = target.is_dir() and not target.is_symlink()
+            if is_dir:
                 shutil.rmtree(target)
             else:
                 target.unlink()
                 Path(str(target) + METADATA_SUFFIX).unlink(missing_ok=True)
-            self.core.log_activity(folder, uid, "delete", clean_rel(p.get("path", "")))
-            return {"ok": True}
+            self.store.mark_received_deleted(folder["folder_id"], target, who)
+            self.core.log_activity(folder, uid, "delete", clean_rel(p.get("path", "")),
+                                   f"{'folder' if is_dir else 'file'} deleted by {who}")
+            if hasattr(self.core, "emit"):
+                self.core.emit("received", {"folder_id": folder["folder_id"], "deleted": True,
+                                            "name": target.name, "from": who})
+            return {"ok": True, "deleted_at": time.time()}
         if method == "fs.download":
             folder, _ = self._folder(p.get("share"), uid, "read")
             rel = clean_rel(p.get("path", ""))
@@ -641,6 +826,7 @@ class ShareService:
             fields = {str(k)[:40]: str(v)[:500] for k, v in (p.get("fields") or {}).items()} \
                 if isinstance(p.get("fields"), dict) else {}
             check_upload_rules(folder, name, size, fields)
+            self._check_approval(folder, uid, clean_rel(p.get("dir", "")), name, size)
             free = free_space(dest)
             if free is not None and free < size + (64 << 20):
                 raise OSError(f"the admin's disk does not have enough free space for {name} "

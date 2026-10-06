@@ -111,6 +111,72 @@ class SendDialog(QDialog):
         return {n: e.text().strip() for n, (e, _r) in self.edits.items() if e.text().strip()}
 
 
+class CodeDialog(QDialog):
+    """E-mail code (OTP): the folder admin wants to be sure it is really you before the first transfer."""
+
+    def __init__(self, parent, core, cur):
+        super().__init__(parent)
+        self.core, self.cur = core, cur
+        owner = cur["owner"]["display_name"] or cur["owner"]["username"]
+        self.channel = ((cur.get("security") or {}).get("otp_channel")) or "email"
+        via = {"email": "e-mail", "sms": "SMS", "whatsapp": "WhatsApp"}[self.channel]
+        self.setWindowTitle("One-time code")
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        lay.addWidget(label("Confirm it is you", "PageTitle"))
+        lay.addWidget(label(f"{owner} asks for a one-time code by {via} before you send or receive files in "
+                            f"'{cur['name']}'. You only need to do this once.", wrap=True))
+        self.info = label("", muted=True, wrap=True)
+        self.code = QLineEdit(placeholderText="6-digit code")
+        self.code.setMaxLength(6)
+        self.code.returnPressed.connect(self._verify)
+        self.send_btn = button({"email": "E-mail me a code", "sms": "Send code by SMS",
+                                "whatsapp": "Send code on WhatsApp"}[self.channel], "secondary", "send", self._send)
+        self.phone_btn = button("Add mobile number", "primary", "account", self._add_phone)
+        self.phone_btn.setVisible(False)
+        lay.addLayout(hbox(self.send_btn, self.phone_btn, None))
+        lay.addWidget(self.info)
+        lay.addLayout(hbox(self.code, button("Confirm", "primary", "check", self._verify)))
+        bb = QDialogButtonBox(QDialogButtonBox.Cancel)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+
+    def _send(self):
+        self.send_btn.setEnabled(False)
+
+        def done(r):
+            self.info.setText(f"Code sent to {r['sent_to']} - valid for {r['expires_in'] // 60} minutes.")
+            self.code.setFocus()
+            self.send_btn.setEnabled(True)
+            self.send_btn.setText("Send a new code")
+
+        def fail(e):
+            self.send_btn.setEnabled(True)
+            self.info.setText(str(e))
+            self.phone_btn.setVisible("mobile number" in str(e))
+        run_bg(lambda: self.core.send_folder_code(self.cur["folder_id"]), ok=done, err=fail)
+
+    def _add_phone(self):
+        from PySide6.QtWidgets import QInputDialog
+        num, ok = QInputDialog.getText(self, "Mobile number", "Your mobile number with country code "
+                                                             "(e.g. +91 98765 43210):")
+        if not ok or not num.strip():
+            return
+
+        def done(me):
+            self.info.setText(f"Saved {me.get('phone')}. Now send the code.")
+            self.phone_btn.setVisible(False)
+        run_bg(lambda: self.core.cloud.update_me({"phone": num.strip()}), ok=done,
+               err=lambda e: self.info.setText(str(e)))
+
+    def _verify(self):
+        code = self.code.text().strip()
+        if len(code) != 6 or not code.isdigit():
+            return self.info.setText("Enter the 6 digits from the e-mail.")
+        run_bg(lambda: self.core.verify_folder_code(self.cur["folder_id"], code), ok=lambda _r: self.accept(),
+               err=lambda e: self.info.setText(str(e)))
+
+
 class ClientFoldersView(QWidget):
     def __init__(self, core, main):
         super().__init__()
@@ -247,7 +313,7 @@ class ClientFoldersView(QWidget):
         self.show_all.setText("All folders" if self._all_uploads else "This folder only")
         self._reload_uploads()
 
-    STATUS = {"queued": ("Waiting for admin", "warn"), "sending": ("Sending", "info"),
+    STATUS = {"deleted": ("Deleted", "muted"), "queued": ("Waiting for admin", "warn"), "sending": ("Sending", "info"),
               "delivered": ("Delivered", "ok"), "failed": ("Failed", "bad"), "cancelled": ("Cancelled", "muted")}
 
     def _reload_uploads(self):
@@ -267,6 +333,8 @@ class ClientFoldersView(QWidget):
             if state == "queued":
                 waiting += 1
             text, color = self.STATUS.get(state, (state, "muted"))
+            if r.get("deleted_at"):                       # I deleted it from the folder later
+                text, color = f"Deleted {fmt_time(r['deleted_at'])}", "muted"
             if state == "queued" and r["admin_online"]:
                 text = "Starting..."
             elif state == "sending" and r["speed"]:
@@ -419,9 +487,10 @@ class ClientFoldersView(QWidget):
                             "perms": f["perms"], "rules": {"allowed_extensions": f.get("allowed_extensions"),
                                                            "max_file_size": f.get("max_file_size"),
                                                            "form_fields": f.get("form_fields") or []},
-                            "owner": f["owner"]}
+                            "owner": f["owner"], "security": f.get("security") or {}}
             self.rel = ""
-            self.reload()
+            if self._ensure_code(self.current):
+                self.reload()
 
     def open_by_id(self):
         fid, ok = QInputDialog.getText(self, "Open folder", "Folder ID from your e-mail (e.g. FD-7K3M-9QX2):")
@@ -500,8 +569,11 @@ class ClientFoldersView(QWidget):
         self._set(self.btn_mkdir, p["upload"] or p["edit"], on, no + "Edit.", offline if not on else "")
         self._set(self.btn_rename, p["edit"], on and len(sel) == 1, no + "Edit.",
                   offline if not on else "Select one item to rename")
-        self._set(self.btn_delete, p["delete"], on and bool(sel), no + "Delete.",
-                  offline if not on else "Select items to delete")
+        own_only = (((self.current or {}).get("security") or {}).get("delete_scope") or "own") == "own"
+        theirs = [e for e in sel if own_only and not e.get("mine")]
+        self._set(self.btn_delete, p["delete"], on and bool(sel) and not theirs, no + "Delete.",
+                  offline if not on else ("You can only delete files you sent" if theirs
+                                          else "Select items to delete"))
         self.btn_up.setEnabled(bool(self.rel))
         self.btn_refresh.setEnabled(on)
         self.perm_label.setText("")
@@ -559,6 +631,10 @@ class ClientFoldersView(QWidget):
         def fail(exc):
             self.files.set_entries([])
             self.message.setText(str(exc))
+            if "one-time code" in str(exc):               # the admin turned it on after we opened the folder
+                cur.setdefault("security", {}).update(require_otp=True, otp_verified=False)
+                if self._ensure_code(cur):
+                    return self.reload()
             self.core._refresh_quietly()
             self.refresh_tree()
         run_bg(lambda: self.core.remote_list(cur["uid"], cur["folder_id"], rel), ok=done, err=fail)
@@ -628,8 +704,23 @@ class ClientFoldersView(QWidget):
             return show_error(exc, self)
         self.main.flash(f"Downloading {job.title} - see Transfers")
 
+    def _ensure_code(self, cur) -> bool:
+        """The admin asked for an e-mail code before the first transfer: ask for it once."""
+        sec = (cur or {}).get("security") or {}
+        if not sec.get("require_otp") or sec.get("otp_verified"):
+            return True
+        d = CodeDialog(self, self.core, cur)
+        if d.exec() == QDialog.Accepted:
+            sec["otp_verified"] = True
+            return True
+        self.files.set_entries([])
+        self.message.setText("Enter the e-mail code to open this folder.")
+        return False
+
     def _upload(self, paths, ask: bool = True):
         cur = self.current
+        if not self._ensure_code(cur):
+            return None
         form = (cur.get("rules") or {}).get("form_fields") or []
         owner = cur["owner"]["display_name"] or cur["owner"]["username"]
         online = self.core.is_online(cur["uid"])
@@ -690,7 +781,9 @@ class ClientFoldersView(QWidget):
         def work():
             for p in paths:
                 self.core.remote_delete(cur["uid"], cur["folder_id"], p)
-        run_bg(work, ok=lambda _r: self.reload(), err=lambda e: (show_error(e, self), self.reload()))
+        run_bg(work, ok=lambda _r: (self.reload(), self.main.flash(f"Deleted {len(paths)} item(s) - logged with "
+                                                                    "the time in the folder's activity")),
+               err=lambda e: (show_error(e, self), self.reload()))
 
     def on_presence(self):
         self.refresh_tree()

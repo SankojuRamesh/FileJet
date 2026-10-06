@@ -59,6 +59,17 @@ def _downloads() -> list[dict]:
     return items
 
 
+def _app_version() -> str:
+    """Version of the desktop app (pyproject.toml next to the cloud folder), e.g. "2.8.0"."""
+    import re
+    try:
+        text = (Path(settings.BASE_DIR).parent / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    return m.group(1) if m else ""
+
+
 def _ctx(page: str, **extra) -> dict:
     return {"page": page, "contact_email": settings.SITE_CONTACT_EMAIL, "company": settings.SITE_COMPANY, **extra}
 
@@ -76,7 +87,7 @@ def pricing(request):
 
 
 def download(request):
-    return render(request, "website/download.html", _ctx("download", downloads=_downloads()))
+    return render(request, "website/download.html", _ctx("download", downloads=_downloads(), version=_app_version()))
 
 
 def download_file(request, name: str):

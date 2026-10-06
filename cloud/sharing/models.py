@@ -31,6 +31,7 @@ def normalize_folder_id(text: str) -> str:
 ROLES = {                                          # role -> (read, upload, edit, delete)
     "uploader": (False, True, False, False),       # "sender": can only send files into the folder
     "viewer": (True, False, False, False),
+    "contributor": (True, True, False, False),     # view & download + upload (no rename / delete)
     "editor": (True, True, True, False),
     "manager": (True, True, True, True),
 }
@@ -60,6 +61,10 @@ class Folder(models.Model):
     form_fields = models.JSONField(default=list, blank=True)               # [{"name": "Project", "required": true}]
     notify_owner = models.BooleanField(default=True)                       # e-mail the admin when uploads finish
     device = models.ForeignKey("accounts.Device", null=True, blank=True, on_delete=models.SET_NULL)
+    # a folder of a workspace shared on its own: the workspace and the path inside it (shown nested in the app and
+    # on the dashboard); empty for a workspace
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="subshares")
+    subpath = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -96,6 +101,23 @@ class FolderMember(models.Model):
     email_sent_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)               # access ends automatically
     via_group = models.CharField(max_length=80, blank=True)
+    # security chosen by the admin when sharing (enforced by the admin's app for every request)
+    APPROVE_NONE, APPROVE_FIRST, APPROVE_EVERY = "none", "first", "every"
+    APPROVE_CHOICES = [(APPROVE_NONE, "No approval"), (APPROVE_FIRST, "First upload only"),
+                       (APPROVE_EVERY, "Every upload")]
+    require_otp = models.BooleanField(default=False, db_default=False)        # one-time code before the first transfer
+    OTP_CHANNELS = [("email", "E-mail"), ("sms", "SMS"), ("whatsapp", "WhatsApp")]
+    otp_channel = models.CharField(max_length=10, default="email", db_default="email", choices=OTP_CHANNELS)
+    otp_verified_at = models.DateTimeField(null=True, blank=True)
+    otp_hash = models.CharField(max_length=64, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
+    otp_sent_at = models.DateTimeField(null=True, blank=True)
+    otp_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
+    approve_uploads = models.CharField(max_length=6, default=APPROVE_NONE, db_default=APPROVE_NONE, choices=APPROVE_CHOICES)
+    # with Delete permission: only the files this person sent ("own") or any file in the folder ("all")
+    DELETE_SCOPES = [("own", "Only files they sent"), ("all", "Any file")]
+    delete_scope = models.CharField(max_length=4, default="own", db_default="own", choices=DELETE_SCOPES)
+    first_upload_approved = models.BooleanField(default=False, db_default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -104,6 +126,12 @@ class FolderMember(models.Model):
 
     def perms(self) -> dict:
         return {"read": self.can_read, "upload": self.can_upload, "edit": self.can_edit, "delete": self.can_delete}
+
+    def security(self) -> dict:
+        return {"require_otp": self.require_otp, "otp_verified": self.otp_verified_at is not None,
+                "otp_channel": self.otp_channel,
+                "approve_uploads": self.approve_uploads, "first_upload_approved": self.first_upload_approved,
+                "delete_scope": self.delete_scope}
 
 
 class Group(models.Model):

@@ -252,6 +252,13 @@ class MainWindow(QMainWindow):
                     self.flash(f"New message from {data.get('from')}: {data.get('text', '')[:60]}")
                     QApplication.alert(self)
             self._update_chat_badge()
+        elif kind == "approval":
+            if data and not data.get("decided"):
+                self.flash(f"{data.get('from')} wants to send {data.get('name')} to '{data.get('folder')}' "
+                           "- accept it under My Folders > Requests")
+                QApplication.alert(self)
+            if "folders" in self.pages:
+                self.pages["folders"].on_approval(data or {})
         elif kind == "received":
             self.flash(f"Received {data.get('name')} from {data.get('from')}")
             if "folders" in self.pages:

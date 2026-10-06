@@ -10,15 +10,24 @@
 <body>
 <div class="shell">
   <nav class="activity" aria-label="Main">
+    {% if user.is_superuser %}
+    {# platform admin: administers the platform only - no workspaces, sharing, transfers or subscription #}
+    <a href="{% url 'staff_orgs' %}" class="{% if tab == 'orgs' %}active{% endif %}" aria-label="Organizations">{% icon "dashboard" %}<span class="tip">Organizations</span></a>
+    <a href="{% url 'staff_relations' %}" class="{% if tab == 'relations' or tab == 'users' %}active{% endif %}" aria-label="Users and relations">{% icon "users" %}<span class="tip">Users &amp; relations</span></a>
+    <a href="{% url 'staff_billing' %}" class="{% if tab == 'billing' %}active{% endif %}" aria-label="Plans and billing">{% icon "subscription" %}<span class="tip">Plans &amp; billing</span></a>
+    <a href="{% url 'staff_tickets' %}" class="{% if tab == 'tickets' %}active{% endif %}" aria-label="Support tickets">{% icon "support" %}{% if staff_open %}<span class="dot-new"></span>{% endif %}<span class="tip">Support tickets</span></a>
+    <a href="{% url 'staff' %}" class="{% if tab == 'overview' or tab == 'employees' %}active{% endif %}" aria-label="Staff console">{% icon "staff" %}<span class="tip">Overview &amp; employees</span></a>
+    {% else %}
     <a href="{% url 'dashboard' %}" class="{% if active == 'dashboard' %}active{% endif %}" aria-label="Dashboard">{% icon "dashboard" %}<span class="tip">Dashboard</span></a>
     <a href="{% url 'transfers' %}" class="{% if active == 'transfers' %}active{% endif %}" aria-label="Transfers">{% icon "transfers" %}<span class="tip">Transfers</span></a>
-    <a href="{% url 'folders' %}" class="{% if active == 'folders' %}active{% endif %}" aria-label="Folders">{% icon "folder" %}{% if folder_invites %}<span class="dot-new"></span>{% endif %}<span class="tip">Folders &amp; permissions</span></a>
+    <a href="{% url 'folders' %}" class="{% if active == 'folders' %}active{% endif %}" aria-label="Workspaces">{% icon "folder" %}{% if folder_invites %}<span class="dot-new"></span>{% endif %}<span class="tip">Workspaces &amp; sharing</span></a>
     <a href="{% url 'users' %}" class="{% if active == 'users' %}active{% endif %}" aria-label="Users">{% icon "users" %}<span class="tip">Users</span></a>
     {% if show_outbox %}<a href="{% url 'inbox' %}" class="{% if active == 'inbox' %}active{% endif %}" aria-label="Inbox">{% icon "mail" %}<span class="tip">Inbox (development)</span></a>{% endif %}
     <a href="{% url 'devices' %}" class="{% if active == 'devices' %}active{% endif %}" aria-label="Devices">{% icon "devices" %}<span class="tip">Devices</span></a>
     <a href="{% url 'subscription' %}" class="{% if active == 'subscription' %}active{% endif %}" aria-label="Subscription">{% icon "subscription" %}<span class="tip">Subscription</span></a>
     <a href="{% url 'support' %}" class="{% if active == 'support' %}active{% endif %}" aria-label="Support">{% icon "support" %}{% if support_unread %}<span class="dot-new"></span>{% endif %}<span class="tip">Support</span></a>
-    {% if user.is_staff or user.is_superuser %}<a href="{% url 'staff' %}" class="{% if active == 'staff' %}active{% endif %}" aria-label="Staff console">{% icon "staff" %}{% if staff_open %}<span class="dot-new"></span>{% endif %}<span class="tip">Staff console</span></a>{% endif %}
+    {% if user.is_staff %}<a href="{% url 'staff' %}" class="{% if active == 'staff' %}active{% endif %}" aria-label="Staff console">{% icon "staff" %}{% if staff_open %}<span class="dot-new"></span>{% endif %}<span class="tip">Staff console</span></a>{% endif %}
+    {% endif %}
     <div class="spacer"></div>
     <a href="{% url 'account' %}" class="{% if active == 'account' %}active{% endif %}" aria-label="Account">{% icon "account" %}<span class="tip">Account</span></a>
     <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}
@@ -35,8 +44,9 @@
   <footer class="statusbar">
     <span>{% icon "shield" 14 %} Metadata only: files never leave the users' computers</span>
     <span class="grow"></span>
+    {% if user.is_superuser %}<span class="hide-sm">Platform admin</span>{% else %}
     <span class="hide-sm">ID {{ user.formatted_id }}</span>
-    <span class="hide-sm">{{ user.subscription.plan.name|default:"Free" }} plan</span>
+    <span class="hide-sm">{{ user.subscription.plan.name|default:"Free" }} plan</span>{% endif %}
     <span id="live-indicator">live</span>
   </footer>
 </div>

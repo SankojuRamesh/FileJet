@@ -1,0 +1,86 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Plans & billing{% endblock %}
+{% block titlebar %}Staff console › Plans &amp; billing{% endblock %}
+{% block content %}
+<h1>Plans &amp; billing</h1>
+{% include "support/_staff_tabs.html" %}
+
+{% if cfg.provider == "dummy" %}
+<div class="card notice"><b>Test mode is on:</b> customers can switch to paid plans without paying. Enter your Razorpay keys
+  below and choose <b>Razorpay</b> to start taking payments.</div>
+{% endif %}
+
+<h2>Plans – prices and limits</h2>
+<p class="muted" style="margin:-4px 0 10px">Limits in GB (1 GB = 1,000,000,000 bytes). Leave a limit empty for <b>unlimited</b>.
+  Changes apply at once to everyone on the plan. Untick <b>Public</b> to hide a plan from new customers.</p>
+<div class="table-wrap"><table class="grid plan-edit">
+  <thead><tr><th>Plan</th><th>Price / period</th><th>Currency</th><th>Max file (GB)</th><th>Transfer / month (GB)</th>
+    <th>Users</th><th>Workspaces</th><th>Description</th><th>Order</th><th>Public</th><th class="num">Subscribers</th><th></th></tr></thead>
+  <tbody>
+  {% for p in plans %}
+    <tr>
+      <td><input form="pf{{ p.pk }}" name="name" value="{{ p.name }}" style="width:110px" aria-label="Name"><div class="muted mono" style="font-size:11px">{{ p.code }}</div></td>
+      <td><input form="pf{{ p.pk }}" name="price" value="{{ p.price_month }}" style="width:80px" inputmode="decimal" aria-label="Price"{% if p.code == "free" %} readonly{% endif %}></td>
+      <td><input form="pf{{ p.pk }}" name="currency" value="{{ p.currency }}" style="width:52px" maxlength="3" aria-label="Currency"></td>
+      <td><input form="pf{{ p.pk }}" name="max_file_gb" value="{{ p.file_gb }}" placeholder="unlimited" style="width:80px" inputmode="decimal" aria-label="Max file size GB"></td>
+      <td><input form="pf{{ p.pk }}" name="quota_gb" value="{{ p.quota_gb }}" placeholder="unlimited" style="width:90px" inputmode="decimal" aria-label="Monthly transfer GB"></td>
+      <td><input form="pf{{ p.pk }}" name="max_users" value="{{ p.max_users|default_if_none:'' }}" placeholder="unlimited" style="width:70px" inputmode="numeric" aria-label="Max users"></td>
+      <td><input form="pf{{ p.pk }}" name="max_folders" value="{{ p.max_folders|default_if_none:'' }}" placeholder="unlimited" style="width:70px" inputmode="numeric" aria-label="Max workspaces"></td>
+      <td><input form="pf{{ p.pk }}" name="description" value="{{ p.description }}" style="width:200px" aria-label="Description"></td>
+      <td><input form="pf{{ p.pk }}" name="sort" value="{{ p.sort }}" style="width:44px" inputmode="numeric" aria-label="Order"></td>
+      <td><input form="pf{{ p.pk }}" type="checkbox" name="public" value="1"{% if p.public %} checked{% endif %}{% if p.code == "free" %} disabled{% endif %} aria-label="Public"></td>
+      <td class="num">{{ p.n }}</td>
+      <td style="white-space:nowrap"><form method="post" id="pf{{ p.pk }}" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="save_plan"><input type="hidden" name="pk" value="{{ p.pk }}"><button class="btn small">Save</button></form>
+        {% if p.code != "free" %}<form method="post" style="display:inline" onsubmit="return confirm('Delete the plan {{ p.name|escapejs }}?')">{% csrf_token %}
+          <input type="hidden" name="action" value="delete_plan"><input type="hidden" name="pk" value="{{ p.pk }}"><button class="btn small secondary">Delete</button></form>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+
+<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>+ Add a plan</b></summary>
+  <form method="post" class="toolbar" style="flex-wrap:wrap;margin-top:10px">{% csrf_token %}<input type="hidden" name="action" value="add_plan">
+    <label style="margin:0">Code <input name="code" placeholder="e.g. team" required pattern="[a-z0-9-]{2,30}" style="width:100px"></label>
+    <label style="margin:0">Name <input name="name" placeholder="Team" required style="width:110px"></label>
+    <label style="margin:0">Price <input name="price" value="0" style="width:80px"></label>
+    <label style="margin:0">Currency <input name="currency" value="INR" maxlength="3" style="width:52px"></label>
+    <label style="margin:0">Max file GB <input name="max_file_gb" placeholder="unlimited" style="width:80px"></label>
+    <label style="margin:0">Transfer GB / month <input name="quota_gb" placeholder="unlimited" style="width:90px"></label>
+    <label style="margin:0">Users <input name="max_users" placeholder="unlimited" style="width:70px"></label>
+    <label style="margin:0">Workspaces <input name="max_folders" placeholder="unlimited" style="width:70px"></label>
+    <label style="margin:0">Description <input name="description" style="width:220px"></label>
+    <label style="margin:0">Order <input name="sort" value="9" style="width:44px"></label>
+    <label style="margin:0"><input type="checkbox" name="public" value="1" checked> Public</label>
+    <button class="btn">Add plan</button>
+  </form>
+</details>
+
+<h2 style="margin-top:20px">Payments – how customers pay</h2>
+<div class="card">
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="save_settings">
+    <table class="grid kv"><tbody>
+      <tr><td class="muted" style="width:220px">Payments</td><td><select name="provider">{% for v, l in providers %}<option value="{{ v }}"{% if v == cfg.provider %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></td></tr>
+      <tr><td class="muted">Razorpay Key ID</td><td><input name="razorpay_key_id" value="{{ cfg.razorpay_key_id }}" placeholder="rzp_live_… or rzp_test_…" style="width:320px" autocomplete="off"></td></tr>
+      <tr><td class="muted">Razorpay Key Secret</td><td><input name="razorpay_key_secret" type="password" value="{% if cfg.razorpay_key_secret %}••••••••{% endif %}" placeholder="from Razorpay › Settings › API keys" style="width:320px" autocomplete="new-password">
+        {% if cfg.razorpay_key_secret %}<label style="margin:0 0 0 8px"><input type="checkbox" name="clear_razorpay_key_secret" value="1"> remove</label>{% endif %}</td></tr>
+      <tr><td class="muted">Webhook secret <span class="muted">(recommended)</span></td><td><input name="razorpay_webhook_secret" type="password" value="{% if cfg.razorpay_webhook_secret %}••••••••{% endif %}" style="width:320px" autocomplete="new-password">
+        {% if cfg.razorpay_webhook_secret %}<label style="margin:0 0 0 8px"><input type="checkbox" name="clear_razorpay_webhook_secret" value="1"> remove</label>{% endif %}
+        <div class="muted" style="margin-top:4px">In Razorpay › Webhooks add <code>{{ webhook_url }}</code> with the events <code>payment.captured</code> and <code>order.paid</code>, and the same secret.</div></td></tr>
+      <tr><td class="muted">Name in the payment window</td><td><input name="business_name" value="{{ cfg.business_name }}" style="width:220px"></td></tr>
+      <tr><td class="muted">One paid period</td><td><input name="period_days" value="{{ cfg.period_days }}" style="width:70px" inputmode="numeric"> days <span class="muted">– paying again adds another period; without payment the plan returns to Free</span></td></tr>
+    </tbody></table>
+    <button class="btn" style="margin-top:10px">Save payment settings</button>
+  </form>
+</div>
+
+<h2 style="margin-top:20px">Payments received</h2>
+<div class="toolbar">{% for r in revenue %}<span class="rel-count">Total paid: <b>{{ r.total|money:r.currency }}</b></span>{% empty %}<span class="muted">No payments yet.</span>{% endfor %}</div>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Date</th><th>User</th><th>Organization</th><th>Plan</th><th class="num">Amount</th><th>Status</th><th>Paid until</th><th>Razorpay payment</th></tr></thead>
+  <tbody>{% for pay in payments %}
+    <tr><td>{{ pay.created_at|date:"Y-m-d H:i" }}</td><td><a href="{% url 'staff_user' pay.user.pk %}">{{ pay.user.label }}</a></td>
+      <td>{{ pay.user.organization|default:"—" }}</td><td>{{ pay.plan.name }}</td><td class="num">{{ pay.amount|money:pay.currency }}</td>
+      <td><span class="pill {% if pay.status == 'paid' %}completed{% elif pay.status == 'failed' %}failed{% else %}paused{% endif %}">{{ pay.get_status_display }}</span></td>
+      <td>{{ pay.period_end|date:"Y-m-d"|default:"—" }}</td><td class="mono">{{ pay.payment_id|default:pay.order_id }}</td></tr>
+  {% empty %}<tr><td colspan="8" class="empty">No payments yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}

@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}FileJet – the fastest way to move big media files{% endblock %}</title>
+  <title>{% block title %}FileJet – the fastest way to move big files of any type{% endblock %}</title>
   <meta name="description" content="{% block description %}FileJet sends files and folders of any size directly between computers – encrypted, resumable, with shared folders, permissions and team chat. No cloud storage.{% endblock %}">
   <meta name="theme-color" content="#07080b">
-  <meta property="og:title" content="FileJet – the fastest way to move big media files">
+  <meta property="og:title" content="FileJet – the fastest way to move big files of any type">
   <meta property="og:description" content="Send files of any size directly between computers. Shared folders, permissions, resume, chat.">
   <meta property="og:image" content="{% static 'site/img/folders@2x.webp' %}">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236f9bff%22/%3E%3Cstop offset=%221%22 stop-color=%22%237c5cff%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x=%221%22 y=%221%22 width=%2230%22 height=%2230%22 rx=%229%22 fill=%22url%28%23g%29%22/%3E%3Cpath d=%22M10.0 22.6v4M7.6 21.4v2.4M12.4 21.4v2.4%22 stroke=%22%23fff%22 stroke-opacity=%22.55%22 stroke-width=%221.2%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M22.0 9.4v-4M19.6 10.6v-2.4M24.4 10.6v-2.4%22 stroke=%22%23fff%22 stroke-opacity=%22.55%22 stroke-width=%221.2%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M10.00,6.79 L10.97,9.13 L10.97,12.80 L14.84,16.70 L14.84,17.79 L10.97,16.07 L10.97,18.57 L12.65,19.97 L12.65,20.91 L10.00,20.28 L7.35,20.91 L7.35,19.97 L9.03,18.57 L9.03,16.07 L5.16,17.79 L5.16,16.70 L9.03,12.80 L9.03,9.13 Z%22 fill=%22%23fff%22/%3E%3Cg transform=%22rotate%28180 22.0 17.8%29%22%3E%3Cpath d=%22M22.00,10.39 L22.98,12.73 L22.98,16.40 L26.84,20.30 L26.84,21.39 L22.98,19.67 L22.98,22.17 L24.65,23.57 L24.65,24.51 L22.00,23.88 L19.35,24.51 L19.35,23.57 L21.02,22.17 L21.02,19.67 L17.16,21.39 L17.16,20.30 L21.02,16.40 L21.02,12.73 Z%22 fill=%22%23fff%22/%3E%3C/g%3E%3C/svg%3E">
@@ -48,7 +48,7 @@
     <div class="foot">
       <div>
         <a class="brand" href="{% url 'home' %}"><span class="logo">{% include "website/_logo.html" with size=30 %}</span>FileJet</a>
-        <p style="margin-top:16px;max-width:320px">The fastest way to move big media files – directly between computers, never through our servers.</p>
+        <p style="margin-top:16px;max-width:320px">The fastest way to move big files of any type – directly between computers, never through our servers.</p>
       </div>
       <div><h4>Product</h4><a href="{% url 'features' %}">Features</a><a href="{% url 'pricing' %}">Pricing</a><a href="{% url 'download' %}">Download</a></div>
       <div><h4>Company</h4><a href="{% url 'about' %}">About</a>{% if contact_email %}<a href="mailto:{{ contact_email }}">Contact</a>{% endif %}</div>

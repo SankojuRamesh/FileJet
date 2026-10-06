@@ -76,6 +76,8 @@ h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacin
 .stat .value { font-size: 24px; color: var(--text-strong); margin-top: 4px; font-variant-numeric: tabular-nums; }
 .stat .value.ok { color: var(--ok); } .stat .value.bad { color: var(--bad); } .stat .value.info { color: var(--info); }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; }
+.subshare { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--ok, #4cc38a);
+            border-radius: var(--radius); background: var(--editor); }
 
 /* tables */
 .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; background: var(--editor); }
@@ -206,3 +208,44 @@ table.attempts { font-size: 12px; }
 table.attempts td, table.attempts th { padding: 5px 8px; }
 .small { font-size: 11px; }
 .ok { color: var(--ok, #4cc38a); }
+
+/* staff console: relations */
+details.rel { padding: 0; }
+details.rel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+details.rel > summary::-webkit-details-marker { display: none; }
+details.rel > summary::before { content: "\25B8"; color: var(--muted); transition: transform .15s; }
+details.rel[open] > summary::before { transform: rotate(90deg); }
+details.rel > summary:hover { background: var(--hover, rgba(255,255,255,.03)); border-radius: var(--radius); }
+.rel-name a { font-weight: 600; color: var(--text-strong); }
+.rel-count { font-size: 12px; color: var(--muted); background: var(--editor); border: 1px solid var(--border);
+             border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.rel-body { padding: 0 16px 16px; }
+.rel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.rel-box { background: var(--editor); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.rel-box h3 { margin: 0 0 8px; font-size: 13px; }
+.rel-line { padding: 3px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rel-ws { padding: 8px 0; border-top: 1px solid var(--border); }
+.rel-ws:first-of-type { border-top: none; }
+.rel-sub { margin: 8px 0 0 22px; padding: 6px 0 0 12px; border-left: 2px solid var(--ok); }
+.rel-members { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0 22px; }
+.rel-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--border);
+            border-radius: 999px; font-size: 12px; background: var(--panel); margin: 2px 4px 2px 0; }
+.perm-tags { display: inline-flex; gap: 2px; }
+.perm-tags span { font-size: 10px; font-weight: 700; width: 16px; height: 16px; border-radius: 4px; display: inline-flex;
+                  align-items: center; justify-content: center; color: var(--faint, #5a6170); background: rgba(255,255,255,.04); }
+.perm-tags span.on { color: #fff; background: var(--accent, #5b8cff); }
+.perm-tags span.on.del { background: var(--bad, #f0716b); }
+
+/* staff console: organizations, plans & billing */
+.card.notice { border-color: rgba(229,180,84,.45); background: rgba(229,180,84,.06); }
+.exp-line { padding: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg a { padding: 6px 14px; color: var(--muted); text-decoration: none; }
+.seg a.on { background: var(--accent); color: #fff; }
+.trend { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding-top: 6px; }
+.trend .bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 6px; }
+.trend .bar i { display: block; width: 100%; min-height: 2px; background: linear-gradient(180deg, #6f9bff, #5b8cff); border-radius: 3px 3px 0 0; }
+.trend .bar span { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.meter.thin { height: 6px; }
+.plan-edit input { padding: 4px 6px; }
+.plan.chosen { outline: 2px solid var(--accent); }

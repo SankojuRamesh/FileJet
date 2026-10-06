@@ -20,6 +20,13 @@ def folders(request):
             if action == "accept":
                 m = services.join_folder(request.user, fid)
                 messages.success(request, f"You joined '{m.folder.name}'. Open it in the FileJet app to send and receive files.")
+            elif action == "otp_send":
+                r = services.send_otp(request.user, fid)
+                via = {"sms": "by SMS ", "whatsapp": "on WhatsApp "}.get(r.get("channel"), "")
+                messages.success(request, f"Code sent {via}to {r['sent_to']} - valid for 10 minutes.")
+            elif action == "otp_verify":
+                services.verify_otp(request.user, fid, request.POST.get("code", ""))
+                messages.success(request, "Code confirmed - you can now send and receive files in this folder.")
             elif action in ("decline", "leave"):
                 services.decline_folder(request.user, fid)
                 messages.success(request, ("Invitation declined." if action == "decline" else "You left the folder.")
@@ -41,7 +48,13 @@ def folders(request):
     names = {m.folder.folder_id: m.folder.name for m in mine}
     for t in sent:
         t.folder_name = names.get(t.folder_id, t.share_name)
-    return render(request, "cloud/folders.html", {"owned": owned, "mine": mine, "sent": sent, "active": "folders"})
+    # workspaces, each with the folders inside it that are shared on their own
+    ids = {f.pk for f in owned}
+    workspaces = [f for f in owned if f.parent_id not in ids]
+    for w in workspaces:
+        w.subs = sorted((f for f in owned if f.parent_id == w.pk), key=lambda f: f.subpath.lower())
+    return render(request, "cloud/folders.html", {"owned": owned, "workspaces": workspaces, "mine": mine,
+                                                  "sent": sent, "active": "folders"})
 
 
 @login_required

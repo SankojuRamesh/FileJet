@@ -1,0 +1,59 @@
+{% extends "cloud/base.html" %}
+{% load cloud_ui %}
+{% block title %}Relations{% endblock %}
+{% block titlebar %}Staff console › Relations{% endblock %}
+{% block content %}
+<h1>Users &amp; relations</h1>
+{% include "support/_staff_tabs.html" %}
+<p class="muted" style="margin:-2px 0 12px">Who added whom, their workspaces and shared folders, and what is shared with them.
+  Metadata only – files are never stored on the server.</p>
+
+<div class="stats" style="margin-bottom:14px">
+  <div class="stat"><div class="label">Users</div><div class="value">{{ totals.users }}</div></div>
+  <div class="stat"><div class="label">Admins (share with others)</div><div class="value info">{{ totals.admins }}</div></div>
+  <div class="stat"><div class="label">User links</div><div class="value">{{ totals.links }}</div></div>
+  <div class="stat"><div class="label">Workspaces</div><div class="value ok">{{ totals.workspaces }}</div></div>
+  <div class="stat"><div class="label">Folders shared on their own</div><div class="value ok">{{ totals.shared }}</div></div>
+  <div class="stat"><div class="label">Folder memberships</div><div class="value">{{ totals.memberships }}</div></div>
+  <div class="stat"><div class="label">Groups</div><div class="value">{{ totals.groups }}</div></div>
+</div>
+
+<form class="toolbar" method="get">
+  <input name="q" value="{{ q }}" placeholder="Search name, e-mail, ID, organization, location" style="width:300px" aria-label="Search">
+  <label style="margin:0"><input type="checkbox" name="connected" value="1"{% if connected %} checked{% endif %}> Only users with connections</label>
+  <button class="btn secondary">Filter</button>
+  <span class="grow"></span>
+  <button type="button" class="btn small secondary" onclick="document.querySelectorAll('details.rel').forEach(d => d.open = true)">Expand all</button>
+  <button type="button" class="btn small secondary" onclick="document.querySelectorAll('details.rel').forEach(d => d.open = false)">Collapse all</button>
+</form>
+
+<h2>Users</h2>
+{% for r in rows %}
+<details class="rel card"{% if q %} open{% endif %}>
+  <summary>
+    <span class="avatar">{{ r.u.label|slice:":1"|upper }}</span>
+    <span class="rel-name"><a href="{% url 'staff_user' r.u.pk %}">{{ r.u.label }}</a> <span class="muted">@{{ r.u.username }} · {{ r.u.formatted_id }}{% if r.u.organization %} · {{ r.u.organization }}{% endif %}{% if r.u.location %} · {{ r.u.location }}{% endif %}</span></span>
+    <span class="grow"></span>
+    {% if r.is_admin %}<span class="pill active">admin</span>{% endif %}
+    <span class="rel-count" title="Users they added">↗ {{ r.added|length }} added</span>
+    <span class="rel-count" title="Added by">↙ by {{ r.added_by|length }}</span>
+    <span class="rel-count" title="Workspaces / shared folders">{% icon "folder" 13 %} {{ r.workspaces|length }}{% if r.shared_n %} + {{ r.shared_n }}{% endif %}</span>
+    <span class="rel-count" title="Folders shared with them">⇄ {{ r.member_of|length }}</span>
+    <span class="muted" style="min-width:70px;text-align:right">{{ r.plan.name|default:"Free" }}</span>
+  </summary>
+  <div class="rel-body">{% include "support/_relations_detail.html" %}</div>
+</details>
+{% empty %}<div class="card muted">No users found.</div>{% endfor %}
+
+<h2 style="margin-top:20px">Connections (admin → user)</h2>
+<div class="table-wrap"><table class="grid">
+  <thead><tr><th>Admin</th><th></th><th>User</th><th>Note</th><th>Added</th><th>Folders shared with this user</th></tr></thead>
+  <tbody>{% for p in pairs %}
+    <tr><td><a href="{% url 'staff_user' p.link.admin.pk %}">{{ p.link.admin.label }}</a> <span class="muted">@{{ p.link.admin.username }}</span></td>
+      <td class="muted">→</td>
+      <td><a href="{% url 'staff_user' p.link.client.pk %}">{{ p.link.client.label }}</a> <span class="muted">@{{ p.link.client.username }}</span></td>
+      <td>{{ p.link.note|default:"—" }}</td><td>{{ p.link.created_at|date:"Y-m-d" }}</td>
+      <td>{% for m in p.folders %}<span class="rel-chip">{% if m.folder.parent %}<span class="muted">{{ m.folder.parent.name }} /</span> {% endif %}{{ m.folder.name }} <span class="muted">{{ m.role|title }}</span>{% include "support/_relations_perms.html" %}</span>{% empty %}<span class="muted">nothing shared yet</span>{% endfor %}</td></tr>
+  {% empty %}<tr><td colspan="6" class="empty">No connections yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}

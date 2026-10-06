@@ -1,5 +1,6 @@
 """Business rules for clients, folders, members and invitation e-mails."""
 import logging
+from datetime import timedelta as _dt_timedelta
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -24,6 +25,8 @@ def add_client(admin: User, query: str, note: str = "") -> ClientLink:
         raise ServiceError("no user with that ID, username or e-mail - they must create an account first", 404)
     if user.id == admin.id:
         raise ServiceError("you cannot add yourself")
+    if user.is_superuser:                         # the platform admin does not share or receive files
+        raise ServiceError("no user with that ID, username or e-mail - they must create an account first", 404)
     limit = get_plan(admin).max_users
     if limit is not None and ClientLink.objects.filter(admin=admin).count() >= limit and \
             not ClientLink.objects.filter(admin=admin, client=user).exists():
@@ -73,6 +76,13 @@ def apply_folder_settings(f: Folder, d: dict) -> None:
         f.form_fields = fields
     if "notify_owner" in d:
         f.notify_owner = bool(d["notify_owner"])
+    if "parent" in d:                            # shared folder inside a workspace of the same owner
+        pid = normalize_folder_id(str(d["parent"] or ""))
+        parent = Folder.objects.filter(owner=f.owner, folder_id=pid).first() if pid else None
+        if parent is not None and (parent.pk == f.pk or parent.parent_id is not None):
+            parent = None                         # only one level: a workspace, never itself
+        f.parent = parent
+        f.subpath = str(d.get("subpath") or "").strip("/")[:500] if parent else ""
 
 
 def owned_folder(owner: User, folder_id: str) -> Folder:
@@ -105,11 +115,36 @@ def set_member(owner: User, folder: Folder, query: str, data: dict, request=None
     perms = _perms_from(data, str(data.get("role", "")))
     fields = dict(zip(("can_read", "can_upload", "can_edit", "can_delete"), perms), role=role_for(perms),
                   expires_at=_expiry(data), via_group=str(data.get("via_group", ""))[:80])
+    fields.update(_security_fields(data))
     member, created = FolderMember.objects.update_or_create(folder=folder, user=user, defaults=fields)
     if created:
         send_invitation(member, request)
         log_event(folder, owner, "access", user.label, f"{member.role} access given to {user.username}")
     return member, created
+
+
+def _security_fields(data: dict, owner_update: bool = False) -> dict:
+    out = {}
+    if "require_otp" in data:
+        out["require_otp"] = bool(data["require_otp"]) and str(data["require_otp"]).lower() not in ("0", "false")
+    if "otp_channel" in data:
+        ch = str(data["otp_channel"])
+        if ch not in dict(FolderMember.OTP_CHANNELS):
+            raise ServiceError("otp_channel must be email, sms or whatsapp")
+        out["otp_channel"] = ch
+    if "approve_uploads" in data:
+        mode = str(data["approve_uploads"])
+        if mode not in dict(FolderMember.APPROVE_CHOICES):
+            raise ServiceError("approve_uploads must be none, first or every")
+        out["approve_uploads"] = mode
+    if "delete_scope" in data:
+        scope = str(data["delete_scope"])
+        if scope not in dict(FolderMember.DELETE_SCOPES):
+            raise ServiceError("delete_scope must be own or all")
+        out["delete_scope"] = scope
+    if owner_update and "first_upload_approved" in data:
+        out["first_upload_approved"] = bool(data["first_upload_approved"])
+    return out
 
 
 def _expiry(data: dict):
@@ -148,14 +183,120 @@ def log_event(folder, owner: User, action: str, path: str = "", detail: str = ""
 def update_member(owner: User, member: FolderMember, data: dict) -> FolderMember:
     if member.folder.owner_id != owner.id:
         raise ServiceError("not your folder", 403)
-    perms = _perms_from(data, str(data.get("role", "")))
-    member.can_read, member.can_upload, member.can_edit, member.can_delete = perms
-    member.role = role_for(perms)
+    changed = []
+    if data.get("role") or any(k in data for k in ("read", "upload", "edit", "delete")):
+        perms = _perms_from(data, str(data.get("role", "")))
+        member.can_read, member.can_upload, member.can_edit, member.can_delete = perms
+        member.role = role_for(perms)
+        changed.append(f"permissions changed to {member.role}")
     if "expires_at" in data:
         member.expires_at = _expiry(data)
+    sec = _security_fields(data, owner_update=True)
+    for k, v in sec.items():
+        setattr(member, k, v)
+    if set(sec) - {"first_upload_approved"}:
+        changed.append("security: " + (f"code by {member.get_otp_channel_display()}, " if member.require_otp else "")
+                       + f"approve uploads: {member.get_approve_uploads_display().lower()}")
     member.save()
-    log_event(member.folder, owner, "access", member.user.label, f"permissions changed to {member.role}")
+    if changed:
+        log_event(member.folder, owner, "access", member.user.label, "; ".join(changed))
     return member
+
+
+# ------------------------------------------------------------------ one-time code (OTP) before the first transfer
+VIA = {"email": "by e-mail", "sms": "by SMS", "whatsapp": "on WhatsApp"}
+OTP_TTL, OTP_RESEND, OTP_TRIES = 600, 60, 5
+
+
+def _otp_digest(member: FolderMember, code: str) -> str:
+    import hashlib
+    import hmac
+    return hmac.new(settings.SECRET_KEY.encode(), f"{member.pk}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def _my_membership(user: User, folder_id: str) -> FolderMember:
+    m = FolderMember.objects.filter(folder__folder_id=normalize_folder_id(folder_id), user=user) \
+        .select_related("folder__owner").first()
+    if m is None:
+        raise ServiceError("this folder is not shared with you", 404)
+    return m
+
+
+def send_otp(user: User, folder_id: str) -> dict:
+    """E-mail a 6-digit code; only its keyed hash is stored."""
+    import secrets as _secrets
+    m = _my_membership(user, folder_id)
+    if not m.require_otp:
+        raise ServiceError("this folder does not ask for an e-mail code", 400)
+    now = timezone.now()
+    if m.otp_sent_at and (now - m.otp_sent_at).total_seconds() < OTP_RESEND:
+        wait = OTP_RESEND - int((now - m.otp_sent_at).total_seconds())
+        raise ServiceError(f"a code was just sent - wait {wait} s before asking for a new one", 429)
+    channel = m.otp_channel
+    if channel in ("sms", "whatsapp"):
+        from . import messaging
+        if not user.phone:
+            raise ServiceError("add your mobile number first (Account settings) - the code is sent by "
+                               + ("SMS" if channel == "sms" else "WhatsApp"), 400)
+        if not messaging.available(channel):
+            raise ServiceError(f"{'SMS' if channel == 'sms' else 'WhatsApp'} codes are not set up on this server "
+                               "yet - ask the folder admin to use e-mail", 503)
+    code = f"{_secrets.randbelow(10 ** 6):06d}"
+    m.otp_hash, m.otp_attempts = _otp_digest(m, code), 0
+    m.otp_sent_at, m.otp_expires_at = now, now + _dt_timedelta(seconds=OTP_TTL)
+    m.save(update_fields=["otp_hash", "otp_attempts", "otp_sent_at", "otp_expires_at", "updated_at"])
+    f, admin = m.folder, m.folder.owner
+    if channel in ("sms", "whatsapp"):
+        text = (f"FileJet code {code} for the folder \"{f.name}\" shared by {admin.label}. "
+                f"Valid {OTP_TTL // 60} min. Do not share it.")
+        try:
+            messaging.send(channel, user.phone, text, code)
+        except messaging.MessagingError as exc:
+            log.warning("%s code to %s failed: %s", channel, user.phone, exc)
+            raise ServiceError(f"the code could not be sent: {exc}", 502) from None
+        if messaging.provider() == "console":       # development: visible in the dev inbox too
+            OutboundEmail.objects.create(to=user.email, subject=f"[{channel.upper()} to {user.phone}] {text}",
+                                         body=f"Your code:  {code}\n\n{text}\n", folder_id=f.folder_id, kind="otp")
+        p = user.phone
+        return {"sent_to": f"{p[:3]}******{p[-3:]}", "channel": channel, "expires_in": OTP_TTL}
+    subject = f"Your FileJet code for \"{f.name}\": {code}"
+    body = (f"Hello {user.label},\n\n{admin.label} asks you to confirm your e-mail before you send or receive "
+            f"files in the folder \"{f.name}\" ({f.folder_id}).\n\n    Your code:  {code}\n\n"
+            f"Enter it in FileJet. The code is valid for {OTP_TTL // 60} minutes.\n"
+            "If you did not ask for it, you can ignore this e-mail.\n")
+    mail = OutboundEmail(to=user.email, subject=subject, body=body, folder_id=f.folder_id, kind="otp")
+    try:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+    except Exception as exc:
+        log.warning("code e-mail to %s failed: %s", user.email, exc)
+        mail.delivered, mail.error = False, str(exc)[:300]
+    mail.save()
+    if not mail.delivered:
+        raise ServiceError("the e-mail could not be sent - try again later or ask the folder admin", 502)
+    name, _, domain = user.email.partition("@")
+    return {"sent_to": f"{name[:2]}***@{domain}", "channel": "email", "expires_in": OTP_TTL}
+
+
+def verify_otp(user: User, folder_id: str, code: str) -> FolderMember:
+    import hmac
+    m = _my_membership(user, folder_id)
+    if m.otp_verified_at:
+        return m
+    if not m.otp_hash or not m.otp_expires_at or m.otp_expires_at < timezone.now():
+        raise ServiceError("the code has expired - ask for a new one", 400)
+    if m.otp_attempts >= OTP_TRIES:
+        raise ServiceError("too many wrong codes - ask for a new one", 429)
+    code = "".join(ch for ch in str(code) if ch.isdigit())
+    if not hmac.compare_digest(_otp_digest(m, code), m.otp_hash):
+        m.otp_attempts += 1
+        m.save(update_fields=["otp_attempts", "updated_at"])
+        left = OTP_TRIES - m.otp_attempts
+        raise ServiceError(f"wrong code - {left} tr{'y' if left == 1 else 'ies'} left" if left
+                           else "too many wrong codes - ask for a new one", 400)
+    m.otp_verified_at, m.otp_hash, m.otp_expires_at = timezone.now(), "", None
+    m.save(update_fields=["otp_verified_at", "otp_hash", "otp_expires_at", "updated_at"])
+    log_event(m.folder, m.folder.owner, "access", "", f"{user.username} confirmed the {m.get_otp_channel_display()} code", actor=user)
+    return m
 
 
 def join_folder(user: User, folder_id: str) -> FolderMember:
@@ -219,6 +360,12 @@ def send_invitation(member: FolderMember, request=None) -> OutboundEmail:
         f"  2. Click \"Open folder\" and enter the folder ID {f.folder_id}\n"
         f"     (it is also listed under Shared with me).\n\n"
         + (f"    Access until: {member.expires_at:%Y-%m-%d}\n" if member.expires_at else "")
+        + (f"    Security: before your first transfer FileJet sends you a code {VIA[member.otp_channel]} "
+           "to confirm it is you.\n" if member.require_otp else "")
+        + ("    Please add your mobile number under Account in FileJet.\n"
+           if member.require_otp and member.otp_channel != "email" and not user.phone else "")
+        + ({"first": "    Your first upload waits until the admin accepts it.\n",
+            "every": "    Each upload waits until the admin accepts it.\n"}.get(member.approve_uploads, ""))
         + "\n"
         f"Web dashboard: {web}\n"
     )
@@ -243,14 +390,15 @@ def user_json(u: User) -> dict:
 def member_json(m: FolderMember) -> dict:
     return {"id": m.id, "user": user_json(m.user), "role": m.role, "perms": m.perms(), "status": m.status,
             "invited_at": m.invited_at, "joined_at": m.joined_at, "email_sent_at": m.email_sent_at,
-            "expires_at": m.expires_at, "via_group": m.via_group}
+            "expires_at": m.expires_at, "via_group": m.via_group, "security": m.security()}
 
 
 def folder_json(f: Folder, members: bool = True) -> dict:
     d = {"folder_id": f.folder_id, "name": f.name, "owner": user_json(f.owner), "created_at": f.created_at,
          "updated_at": f.updated_at, "kind": f.kind, "description": f.description,
          "allowed_extensions": f.allowed_extensions, "max_file_size": f.max_file_size, "form_fields": f.form_fields,
-         "notify_owner": f.notify_owner}
+         "notify_owner": f.notify_owner,
+         "parent": f.parent.folder_id if f.parent_id else "", "subpath": f.subpath}
     if members:
         d["members"] = [member_json(m) for m in f.members.select_related("user")]
     return d
@@ -285,7 +433,7 @@ def overview(user: User) -> dict:
     return {
         "owned": [dict(folder_json(f), stats=own_stats.get(f.folder_id, EMPTY_STATS)) for f in owned],
         "member": [dict(folder_json(m.folder, members=False), role=m.role, perms=m.perms(), status=m.status,
-                        member_id=m.id, expires_at=m.expires_at,
+                        member_id=m.id, expires_at=m.expires_at, security=m.security(),
                         stats=my_stats.get(m.folder.folder_id, EMPTY_STATS)) for m in mine],
         "groups": [{"id": g.id, "name": g.name, "members": [user_json(u) for u in g.members.all()]}
                    for g in Group.objects.filter(admin=user).prefetch_related("members")],

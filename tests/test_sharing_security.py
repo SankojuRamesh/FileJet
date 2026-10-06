@@ -80,11 +80,13 @@ FID = "FD-TEST-2345"
 BOB = "111222333"
 
 
-def grant(store, uid, read=False, upload=False, edit=False, delete=False, status="active", expires=None):
+def grant(store, uid, read=False, upload=False, edit=False, delete=False, status="active", expires=None,
+          delete_scope="own"):
     store.upsert_member(FID, {"id": 1, "user": {"public_id": uid, "username": "bob", "display_name": "Bob",
                                                 "email": "b@example.com"},
                               "perms": {"read": read, "upload": upload, "edit": edit, "delete": delete},
-                              "role": "custom", "status": status, "expires_at": expires})
+                              "role": "custom", "status": status, "expires_at": expires,
+                              "security": {"delete_scope": delete_scope}})
 
 
 @pytest.fixture
@@ -133,7 +135,10 @@ def test_permissions_enforced_per_operation(service):
     svc.handle(BOB, "fs.rename", {"share": share, "path": "docs", "new_name": "d2"})
     assert (root / "d2" / "a.txt").exists()
 
-    grant(store, BOB, delete=True)
+    grant(store, BOB, delete=True)                                        # default: only files Bob sent
+    with pytest.raises(PermissionError, match="only delete files you sent"):
+        svc.handle(BOB, "fs.delete", {"share": share, "path": "d2/a.txt"})
+    grant(store, BOB, delete=True, delete_scope="all")                    # admin allows any file
     svc.handle(BOB, "fs.delete", {"share": share, "path": "d2/a.txt"})
     assert not (root / "d2" / "a.txt").exists()
     with pytest.raises(PermissionError):

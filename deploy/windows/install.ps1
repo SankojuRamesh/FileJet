@@ -7,7 +7,7 @@
 
       powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1
       powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Address 192.168.1.20
-      powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
+      powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain filejet.live
 
   What it does:
     1. copies the server files to -InstallDir (default C:\FileJet)

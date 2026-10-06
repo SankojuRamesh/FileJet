@@ -237,12 +237,12 @@ Full step-by-step guide: **[docs/RUN_AND_DEPLOY.md](docs/RUN_AND_DEPLOY.md)**.
 ```powershell
 # Windows server, in an Administrator PowerShell
 powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1                         # office network
-powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain iotgateway.live
+powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -Domain filejet.live
 ```
 ```bash
 # Linux server (Ubuntu/Debian)
 sudo bash deploy/linux/install.sh                                   # office network
-sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, http://iotgateway.live/
+sudo bash deploy/linux/install.sh --domain filejet.live     # internet, http://filejet.live/
 ```
 
 **With Docker (optional).**
@@ -250,7 +250,7 @@ sudo bash deploy/linux/install.sh --domain iotgateway.live     # internet, http:
 cp .env.example .env && docker compose up -d --build
 ```
 
-* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `http://iotgateway.live/`)
+* Users enter the Cloud URL the installer prints (e.g. `http://192.168.1.20:8000/` or `http://filejet.live/`)
   via **Change** on the sign-in screen.
 * Ports to open: office network TCP 8000, 8765 and 8766; domain TCP 80 and 8766.
 

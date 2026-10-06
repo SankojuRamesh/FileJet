@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -113,7 +113,8 @@ def staff_users(request):
         .annotate(devices_n=Count("devices", distinct=True)).order_by("-date_joined")
     if q:
         qs = qs.filter(Q(username__icontains=q) | Q(email__icontains=q) | Q(display_name__icontains=q)
-                       | Q(public_id__icontains=q.replace(" ", "")) | Q(organization__icontains=q))
+                       | Q(public_id__icontains=q.replace(" ", "")) | Q(organization__icontains=q)
+                       | Q(location__icontains=q))
     if plan:
         qs = qs.filter(subscription__plan__code=plan)
     if expiring:
@@ -157,7 +158,28 @@ def staff_user(request, pk):
         "active": "staff", "tab": "users", "u": u, "sub": sub, "end": end, "days": days,
         "plans": Plan.objects.order_by("sort"), "statuses": Subscription._meta.get_field("status").choices,
         "tickets": Ticket.objects.filter(user=u)[:20], "devices": u.devices.all()[:20],
-        "is_admin": services.is_platform_admin(request.user)})
+        "is_admin": services.is_platform_admin(request.user), "rel": _relations_of(request, u)})
+
+
+def _relations_of(request, u):
+    """The user's connections - shown to the platform admin only."""
+    if not services.is_platform_admin(request.user) or u.is_staff or u.is_superuser:
+        return None
+    from . import relations
+    rows = relations.build(user_ids=[u.pk])["rows"]
+    return rows[0] if rows else None
+
+
+@admin_required
+def staff_relations(request):
+    """Platform admin: every user and how they are connected (added by / added, workspaces, shared folders,
+    folders shared with them, groups). Metadata only."""
+    from . import relations
+    q = request.GET.get("q", "").strip()
+    only = request.GET.get("connected") == "1"
+    data = relations.build(q, only_connected=only)
+    return render(request, "support/staff_relations.html", dict(data, active="staff", tab="relations", q=q,
+                                                                 connected=only))
 
 
 @staff_required
@@ -234,3 +256,119 @@ def staff_employees(request):
         open_n=Count("assigned_tickets", filter=~Q(assigned_tickets__status=Ticket.CLOSED))).order_by("-is_superuser",
                                                                                                     "username")
     return render(request, "support/staff_employees.html", {"active": "staff", "tab": "employees", "staff": staff})
+
+
+# ================================================================== platform admin: organizations, plans & billing
+@admin_required
+def staff_orgs(request):
+    """Organizations and their users, data transferred per day / week / month, plans about to expire."""
+    from . import orgs
+    kind = request.GET.get("by", "month") if request.GET.get("by") in ("day", "week", "month") else "month"
+    try:
+        day = dt.date.fromisoformat(request.GET.get("date", ""))
+    except ValueError:
+        day = timezone.localdate()
+    q = request.GET.get("q", "").strip()
+    data = orgs.build(kind, day, q)
+    try:
+        within = max(1, min(90, int(request.GET.get("within", 7))))
+    except ValueError:
+        within = 7
+    return render(request, "support/staff_orgs.html", dict(
+        data, active="staff", tab="orgs", by=kind, day=day, q=q, today=timezone.localdate(),
+        exp=orgs.expiring(within), within_opts=[3, 7, 14, 30],
+        periods=[("day", "Day"), ("week", "Week"), ("month", "Month")]))
+
+
+GB = 10 ** 9
+
+
+def _gb(value: str):
+    """Form value in GB -> bytes; empty = unlimited (None)."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    n = float(value)
+    if n < 0:
+        raise ValueError("limits cannot be negative")
+    return int(round(n * GB))
+
+
+def _count(value: str):
+    value = (value or "").strip()
+    return int(value) if value else None
+
+
+@admin_required
+def staff_billing(request):
+    """All plans (prices, limits) and how customers pay - edited by the platform admin."""
+    from decimal import Decimal, InvalidOperation
+
+    from billing.models import BillingSettings, Payment
+    cfg = BillingSettings.get()
+    if request.method == "POST":
+        action = request.POST.get("action")
+        try:
+            if action in ("save_plan", "add_plan"):
+                plan = Plan() if action == "add_plan" else get_object_or_404(Plan, pk=request.POST.get("pk"))
+                code = request.POST.get("code", "").strip().lower()
+                if action == "add_plan":
+                    import re
+                    if not re.fullmatch(r"[a-z0-9-]{2,30}", code):
+                        raise ValueError("code: 2-30 lowercase letters, digits or -")
+                    if Plan.objects.filter(code=code).exists():
+                        raise ValueError(f"a plan with code '{code}' exists already")
+                    plan.code = code
+                plan.name = request.POST.get("name", "").strip()[:40] or plan.code.title()
+                try:
+                    plan.price_month = Decimal(request.POST.get("price", "0") or "0").quantize(Decimal("0.01"))
+                except InvalidOperation:
+                    raise ValueError("price must be a number") from None
+                if plan.price_month < 0 or (plan.code == "free" and plan.price_month):
+                    raise ValueError("the Free plan must cost 0, prices cannot be negative")
+                plan.currency = (request.POST.get("currency", "INR").strip().upper() or "INR")[:3]
+                plan.max_file_size = _gb(request.POST.get("max_file_gb"))
+                plan.monthly_quota = _gb(request.POST.get("quota_gb"))
+                plan.max_users = _count(request.POST.get("max_users"))
+                plan.max_folders = _count(request.POST.get("max_folders"))
+                plan.description = request.POST.get("description", "").strip()[:200]
+                plan.sort = int(request.POST.get("sort") or 0)
+                plan.public = plan.code == "free" or bool(request.POST.get("public"))
+                plan.save()
+                messages.success(request, f"Plan '{plan.name}' saved.")
+            elif action == "delete_plan":
+                plan = get_object_or_404(Plan, pk=request.POST.get("pk"))
+                if plan.code == "free":
+                    raise ValueError("the Free plan cannot be deleted")
+                if Subscription.objects.filter(plan=plan).exists() or Payment.objects.filter(plan=plan).exists():
+                    raise ValueError(f"'{plan.name}' has subscribers or payments - hide it instead (untick Public)")
+                plan.delete()
+                messages.success(request, f"Plan '{plan.name}' deleted.")
+            elif action == "save_settings":
+                provider = request.POST.get("provider", cfg.provider)
+                cfg.provider = provider if provider in dict(BillingSettings.PROVIDERS) else cfg.provider
+                cfg.razorpay_key_id = request.POST.get("razorpay_key_id", "").strip()
+                for f in ("razorpay_key_secret", "razorpay_webhook_secret"):
+                    v = request.POST.get(f, "").strip()
+                    if v and set(v) != {"•"}:            # an untouched masked field keeps the stored secret
+                        setattr(cfg, f, v)
+                    elif request.POST.get(f"clear_{f}"):
+                        setattr(cfg, f, "")
+                cfg.business_name = request.POST.get("business_name", "").strip()[:80] or "FileJet"
+                cfg.period_days = max(1, min(366, int(request.POST.get("period_days") or 30)))
+                if cfg.provider == BillingSettings.RAZORPAY and not cfg.razorpay_ready:
+                    raise ValueError("enter the Razorpay Key ID and Key Secret before switching payments on")
+                cfg.save()
+                messages.success(request, "Payment settings saved.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        return redirect("staff_billing")
+    plans = list(Plan.objects.annotate(n=Count("subscription")).order_by("sort", "price_month"))
+    for p in plans:
+        p.file_gb = "" if p.max_file_size is None else f"{p.max_file_size / GB:g}"
+        p.quota_gb = "" if p.monthly_quota is None else f"{p.monthly_quota / GB:g}"
+    return render(request, "support/staff_billing.html", {
+        "active": "staff", "tab": "billing", "plans": plans, "cfg": cfg, "providers": BillingSettings.PROVIDERS,
+        "webhook_url": request.build_absolute_uri("/billing/razorpay/webhook/"),
+        "payments": Payment.objects.select_related("user", "plan")[:50],
+        "revenue": Payment.objects.filter(status=Payment.PAID).values("currency").annotate(total=Sum("amount"))})

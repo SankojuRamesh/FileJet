@@ -319,7 +319,15 @@ class AccountView(QWidget):
         self.usage_bar = QProgressBar()
         self.usage_bar.setRange(0, 1000)
         self.usage = label("", muted=True)
+        self.phone = QLineEdit(placeholderText="+91 98765 43210")
+        self.phone.setMaximumWidth(260)
+        self.phone_msg = label("", muted=True)
         self.lay.addWidget(card(label("PROFILE", "SectionTitle"), self.name, self.details,
+                                _w(hbox(label("Mobile number"), self.phone,
+                                        button("Save", "primary", "check", self._save_phone, small=True),
+                                        self.phone_msg, None)),
+                                label("Used only for one-time codes (SMS / WhatsApp) when a folder admin asks for "
+                                      "one. Include the country code.", muted=True, wrap=True),
                                 _w(hbox(button("Edit profile on the web", "secondary", "web",
                                                lambda: self._web("account/")), None))))
         self.lay.addWidget(card(label("SUBSCRIPTION", "SectionTitle"), self.plan, self.usage_bar, self.usage,
@@ -334,9 +342,19 @@ class AccountView(QWidget):
     def _web(self, path):
         QDesktopServices.openUrl(QUrl(self.core.cloud.base + path))
 
+    def _save_phone(self):
+        def done(me):
+            self.phone.setText(me.get("phone") or "")
+            self.phone_msg.setText("Saved" if me.get("phone") else "Removed")
+
+        def fail(e):
+            self.phone_msg.setText(str(e).removeprefix("phone: "))
+        run_bg(lambda: self.core.cloud.update_me({"phone": self.phone.text().strip()}), ok=done, err=fail)
+
     def reload(self):
         def done(me):
             pid = me["public_id"]
+            self.phone.setText(me.get("phone") or "")
             self.name.setText(me.get("display_name") or me["username"])
             self.details.setText(f"@{me['username']} · {me['email']} · ID {pid[:3]} {pid[3:6]} {pid[6:]} · "
                                  f"device {self.core.identity.fingerprint[:12]}...")

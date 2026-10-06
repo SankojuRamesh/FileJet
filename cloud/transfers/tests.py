@@ -352,10 +352,16 @@ class PageTests(Base):
         self.assertContains(self.client.get("/api/transfers/stats/"), "completed")
 
     def test_web_register(self):
-        r = self.client.post("/register/", {"username": "zoe", "email": "z@example.com", "display_name": "Zoe",
-                                            "password": "Str0ng-pass-123", "password2": "Str0ng-pass-123"})
+        data = {"username": "zoe", "email": "z@example.com", "display_name": "Zoe",
+                "password": "Str0ng-pass-123", "password2": "Str0ng-pass-123"}
+        r = self.client.post("/register/", data)                       # organization + location are required
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(User.objects.filter(username="zoe").exists())
+        r = self.client.post("/register/", dict(data, organization="Zoe Films", location="Pune, India"))
         self.assertRedirects(r, "/dashboard/")
-        self.assertEqual(User.objects.get(username="zoe").subscription.plan.code, "free")
+        zoe = User.objects.get(username="zoe")
+        self.assertEqual(zoe.subscription.plan.code, "free")
+        self.assertEqual((zoe.organization, zoe.location), ("Zoe Films", "Pune, India"))
 
 
 class AttemptTests(ReportTests):

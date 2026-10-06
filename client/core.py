@@ -33,7 +33,7 @@ from .presence import Messenger, PresenceClient, RpcError, presence_url
 from .receiver import ReceiverEngine
 from .sender import SenderEngine
 from . import thumbs
-from .shares import (ShareService, ShareStore, check_upload_rules, clean_rel, free_space, safe_child,
+from .shares import (CODE_NEEDED, WAIT_APPROVAL, ShareService, ShareStore, check_upload_rules, clean_rel, free_space, safe_child,
                      write_metadata_sidecar)
 from .transfer_manager import TransferManager
 
@@ -216,13 +216,17 @@ class AppCore:
         self._after_login()
         return self.me
 
-    def register(self, username, email, password, display_name="") -> dict:
-        self.cloud.register(username, email, password, display_name)
+    def register(self, username, email, password, display_name="", organization="", location="") -> dict:
+        self.cloud.register(username, email, password, display_name, organization, location)
         self._after_login()
         return self.me
 
     def _after_login(self) -> None:
         self.me = self.cloud.me()
+        if self.me.get("platform_admin"):            # the superadmin does not share or send files
+            self.cloud.logout()
+            raise PermissionError("This is the platform admin account - it is used only in the web admin panel "
+                                  "(staff console). Sign in to the app with a normal user account.")
         self.cloud.register_device(self.identity)
         self.cloud.signal_token()
         if self.cloud.signaling_url and not self.server_override:
@@ -373,6 +377,52 @@ class AppCore:
         self.refresh_contacts()
         self._nudge(folder["owner"]["public_id"])
 
+    # ---- security: e-mail code (member) and upload approval (admin)
+    def send_folder_code(self, folder_id: str) -> dict:
+        return self.cloud.send_folder_code(folder_id)
+
+    def verify_folder_code(self, folder_id: str, code: str) -> dict:
+        r = self.cloud.verify_folder_code(folder_id, code)
+        self.refresh_contacts()
+        f = next((x for x in self.my_folders() if x["folder_id"] == folder_id), None)
+        if f is not None:
+            self._nudge(f["owner"]["public_id"])      # the admin's app learns "verified" right away
+        self._backoff.clear()
+        self._outbox_kick.set()
+        return r
+
+    def upload_requests(self, folder_id: str | None = None) -> list[dict]:
+        return self.store.upload_requests(folder_id)
+
+    def decide_upload(self, req_id: str, approve: bool) -> dict | None:
+        req = self.store.decide_request(req_id, approve)
+        if req is None:
+            return None
+        m = self.store.member(req["folder_id"], req["uid"])
+        if approve and m and m["approve_uploads"] == "first" and not m["first_approved"]:
+            self.store.set_first_approved(req["folder_id"], req["uid"])
+            try:                                      # remembered in the cloud too (other devices of the admin)
+                self.cloud.update_member(req["folder_id"], m["member_id"], {"first_upload_approved": True})
+            except CloudError as exc:
+                log.warning("could not save the approval in the cloud: %s", exc)
+        self._nudge(req["uid"])                       # the sender's app retries right away
+        self.emit("approval", {"folder_id": req["folder_id"], "decided": True})
+        return req
+
+    def set_member_security(self, folder_id: str, uid: str, require_otp: bool, approve_uploads: str,
+                            otp_channel: str = "email", delete_scope: str | None = None) -> dict:
+        local = self.store.member(folder_id, uid)
+        if local is None:
+            raise ValueError("unknown member")
+        data = {"require_otp": require_otp, "approve_uploads": approve_uploads, "otp_channel": otp_channel}
+        if delete_scope:
+            data["delete_scope"] = delete_scope
+        m = self.cloud.update_member(folder_id, local["member_id"], data)
+        self.store.upsert_member(folder_id, m)
+        self.emit("contacts")
+        self._nudge(uid)
+        return m
+
     def my_folders(self) -> list[dict]:
         return self.overview.get("member", [])
 
@@ -396,6 +446,8 @@ class AppCore:
             self.messenger.on_undeliverable(*args)
         elif kind == "hint":
             self._hint.set()                       # coalesced by the refresher thread, never dropped
+            self._backoff.clear()                  # e.g. the admin accepted an upload: try again now
+            self._outbox_kick.set()
         elif kind in ("connected", "disconnected", "replaced"):
             self.emit("server", {"state": kind, "detail": args[0] if args else None})
 
@@ -718,8 +770,8 @@ class AppCore:
             self._nudge(uid)
 
     def set_member(self, folder_id: str, uid: str, role: str | None = None, perms: dict | None = None,
-                   expires_at: str | None = None) -> dict:
-        data = dict(perms or {})
+                   expires_at: str | None = None, security: dict | None = None) -> dict:
+        data = dict(perms or {}, **(security or {}))
         if role:
             data["role"] = role
         if expires_at is not None:
@@ -758,8 +810,11 @@ class AppCore:
         local = self.store.member(folder_id, uid)
         return self.cloud.resend_invite(folder_id, local["member_id"])
 
-    def add_group_to_folder(self, folder_id: str, group_id: int, role: str, expires_at: str | None = None) -> int:
-        data = {"role": role}
+    def add_group_to_folder(self, folder_id: str, group_id: int, role: str | None, expires_at: str | None = None,
+                            perms: dict | None = None, security: dict | None = None) -> int:
+        data = dict(perms or {}, **(security or {}))    # the same permissions / security as for one user
+        if role:
+            data["role"] = role
         if expires_at:
             data["expires_at"] = expires_at
         r = self.cloud.add_group_to_folder(folder_id, group_id, data)
@@ -805,6 +860,7 @@ class AppCore:
 
     def remote_delete(self, uid, share_uid, path) -> None:
         self.call(uid, "fs.delete", {"share": share_uid, "path": path})
+        self.store.mark_outbox_deleted(share_uid, path)      # "My uploads" shows when it was deleted
 
     def remote_rename(self, uid, share_uid, path, new_name) -> None:
         self.call(uid, "fs.rename", {"share": share_uid, "path": path, "new_name": new_name})
@@ -1067,7 +1123,10 @@ class AppCore:
                 job.state = "completed"
             elif "queued" in states:
                 job.state = "queued"
-                job.error = "waiting for the admin to be online - delivered automatically"
+                # say why it waits: the admin's OK / the e-mail code, or simply the admin being offline
+                job.error = next((i.error for i in job.items if i.error and (WAIT_APPROVAL in i.error
+                                                                             or CODE_NEEDED in i.error)),
+                                 "waiting for the admin to be online - delivered automatically")
             else:
                 job.state = "failed"
                 job.error = next((i.error for i in job.items if i.error), "some files failed")

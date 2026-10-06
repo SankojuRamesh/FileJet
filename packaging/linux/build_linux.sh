@@ -2,7 +2,7 @@
 # Build the FileJet desktop app for Linux (Ubuntu/Debian, x86_64) - run ON an Ubuntu machine.
 #
 #   bash packaging/linux/build_linux.sh
-#   bash packaging/linux/build_linux.sh --cloud-url http://iotgateway.live/ --signal-url ws://iotgateway.live:8765/ws
+#   bash packaging/linux/build_linux.sh --cloud-url http://filejet.live/ --signal-url ws://filejet.live:8765/ws
 #
 # Produces in dist/:
 #   FileJet                          single-file program  (run: ./FileJet)
@@ -73,7 +73,7 @@ Section: net
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $SIZE_KB
-Maintainer: FileJet <no-reply@iotgateway.live>
+Maintainer: FileJet <no-reply@filejet.live>
 Depends: libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libfontconfig1, libdbus-1-3, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0, libxcb-xkb1
 Description: FileJet - fast direct file and folder transfer
  Share folders with users, send and receive files and folders of any size

@@ -1,17 +1,19 @@
 """My Folders (on this computer, shared with users with per-user permissions) and Users (by ID, groups)."""
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QSize, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
                                QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLineEdit, QListWidget,
-                               QListWidgetItem, QMenu, QPlainTextEdit, QRadioButton, QSpinBox,
+                               QListWidgetItem, QMenu, QPlainTextEdit, QRadioButton, QSpinBox, QTreeWidget, QTreeWidgetItem,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
-from ..shares import ROLE_TEXT, ROLES, SIZER, list_dir, resolve_in_share, size_text
+from ..shares import ROLE_TEXT, ROLES, SIZER, list_dir, list_files_deep, resolve_in_share, size_text
 from ..util import fmt_bytes, sanitize_filename
 from . import icons
 from .common import (big_bar, button, card, confirm, fmt_time, hbox, label, open_file, page, run_bg, set_bar,
@@ -98,15 +100,15 @@ def _vbox(*ws):
 class NewFolderDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
-        self.setWindowTitle("New folder")
+        self.setWindowTitle("New workspace")
         self.setMinimumWidth(620)
         lay = QVBoxLayout(self)
         form = QFormLayout()
-        self.name = QLineEdit(placeholderText="Folder name")
-        form.addRow("Folder name", self.name)
+        self.name = QLineEdit(placeholderText="Workspace name, e.g. Wedding 2026")
+        form.addRow("Workspace name", self.name)
         lay.addLayout(form)
         self.use_existing = QRadioButton("Use an existing folder on this computer / NAS")
-        self.create_new = QRadioButton("Create a new folder")
+        self.create_new = QRadioButton("Create a new workspace folder")
         self.create_new.setChecked(True)
         g = QButtonGroup(self)
         g.addButton(self.use_existing)
@@ -149,10 +151,84 @@ class NewFolderDialog(QDialog):
             self.result_value = (name or p.name, p, False, self.settings.values())
         else:
             if not name:
-                return show_error("Enter a folder name.", self)
+                return show_error("Enter a workspace name.", self)
             self.result_value = (name, Path(self.parent_dir.text().strip()) / sanitize_filename(name), True,
                                  self.settings.values())
         self.accept()
+
+
+APPROVE_MODES = [("none", "No approval - they can send right away"),
+                 ("first", "I accept their first upload"),
+                 ("every", "I accept every upload")]
+
+
+CHANNEL_TEXT = {"email": "E-mail", "sms": "SMS", "whatsapp": "WhatsApp"}
+
+
+def security_text(m: dict) -> str:
+    parts = []
+    if m.get("require_otp"):
+        via = CHANNEL_TEXT.get(m.get("otp_channel") or "email", "E-mail")
+        parts.append(f"{via} code ✓" if m.get("otp_verified") else f"{via} code needed")
+    mode = m.get("approve_uploads") or "none"
+    if mode == "every":
+        parts.append("Approve every upload")
+    elif mode == "first":
+        parts.append("First upload ✓" if m.get("first_approved") else "Approve first upload")
+    if m.get("can_delete"):
+        parts.append("Delete any file" if m.get("delete_scope") == "all" else "Delete own files")
+    return " · ".join(parts) or "None"
+
+
+class SecurityBox(QWidget):
+    """E-mail code + upload approval, chosen when sharing (and changeable later)."""
+
+    def __init__(self, require_otp: bool = False, mode: str = "none", channel: str = "email",
+                 delete_scope: str = "own"):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.otp = QCheckBox("Ask for a one-time code (OTP) before their first transfer, sent by")
+        self.otp.setChecked(require_otp)
+        self.channel = QComboBox()
+        for key, text in (("email", "E-mail"), ("sms", "SMS to their mobile"), ("whatsapp", "WhatsApp")):
+            self.channel.addItem(text, key)
+        self.channel.setCurrentIndex(max(0, self.channel.findData(channel)))
+        self.channel.setEnabled(require_otp)
+        self.otp.toggled.connect(self.channel.setEnabled)
+        self.approve = QComboBox()
+        for key, text in APPROVE_MODES:
+            self.approve.addItem(text, key)
+        self.approve.setCurrentIndex(max(0, self.approve.findData(mode)))
+        self.delete_scope = QComboBox()
+        self.delete_scope.addItem("With Delete permission: only files they sent", "own")
+        self.delete_scope.addItem("With Delete permission: any file in the folder", "all")
+        self.delete_scope.setCurrentIndex(max(0, self.delete_scope.findData(delete_scope)))
+        lay.addWidget(_w(hbox(self.otp, self.channel, None)))
+        lay.addWidget(self.approve)
+        lay.addWidget(self.delete_scope)
+
+    def values(self) -> dict:
+        return {"require_otp": self.otp.isChecked(), "otp_channel": self.channel.currentData(),
+                "approve_uploads": self.approve.currentData(), "delete_scope": self.delete_scope.currentData()}
+
+
+class SecurityDialog(QDialog):
+    def __init__(self, parent, member: dict):
+        super().__init__(parent)
+        self.setWindowTitle(f"Security - {member['name']}")
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        lay.addWidget(label(f"Security for {member['name']}", "SectionTitle"))
+        self.box = SecurityBox(bool(member.get("require_otp")), member.get("approve_uploads") or "none",
+                               member.get("otp_channel") or "email", member.get("delete_scope") or "own")
+        lay.addWidget(self.box)
+        lay.addWidget(label("Your app checks this for every request from this person - files never pass through "
+                            "the cloud.", muted=True, wrap=True))
+        bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
 
 
 class ShareDialog(QDialog):
@@ -166,19 +242,32 @@ class ShareDialog(QDialog):
         self.setMinimumSize(600, 640)
         lay = QVBoxLayout(self)
         lay.addWidget(label(f"Share '{folder['name']}'", "PageTitle"))
-        lay.addWidget(label(f"Folder ID {folder['folder_id']} · the people you tick get an e-mail and see it "
+        head = (f"Folder ID {folder['folder_id']}" if folder.get("folder_id")
+                else f"Only the folder '{folder['name']}' is shared - not the rest of the workspace")
+        lay.addWidget(label(f"{head} · the people you tick get an e-mail and see it "
                             "under 'Shared with me' in their app.", muted=True, wrap=True))
 
-        lay.addWidget(label("ADD BY ID", "SectionTitle"))
-        self.query = QLineEdit(placeholderText="User ID (e.g. 364 866 519), username or e-mail")
-        self.query.returnPressed.connect(self._add_by_id)
+        lay.addWidget(label("PICK A USER OR ADD BY ID", "SectionTitle"))
+        from .user_picker import UserPicker
+        self.query = UserPicker("Click to choose one of your users, or type a user ID, username or e-mail")
+        self.query.remove_requested.connect(self._remove_user)
+        self.query.lineEdit().returnPressed.connect(self._add_by_id)
+        self.query.activated.connect(self._picked)
         self.add_btn = button("Add", "secondary", "plus", self._add_by_id)
         lay.addLayout(hbox(self.query, self.add_btn))
 
-        lay.addWidget(label("YOUR USERS", "SectionTitle"))
-        self.filter = QLineEdit(placeholderText="Search users...")
+        lay.addWidget(label("YOUR GROUPS AND USERS", "SectionTitle"))
+        self.filter = QLineEdit(placeholderText="Search groups and users...")
         self.filter.textChanged.connect(self._filter)
-        lay.addWidget(self.filter)
+        self.show_kind = QButtonGroup(self)
+        kinds = []
+        for i, text in enumerate(("All", "Groups", "Individual users")):
+            rb = QRadioButton(text)
+            rb.setChecked(i == 0)
+            self.show_kind.addButton(rb, i)
+            kinds.append(rb)
+        self.show_kind.idClicked.connect(lambda _i: self._filter(self.filter.text()))
+        lay.addLayout(hbox(label("Show:"), *kinds, None, self.filter))
         self.people = QListWidget()
         self.people.setIconSize(QSize(24, 24))
         self.people.itemChanged.connect(lambda _it: self._update_ok())
@@ -187,7 +276,7 @@ class ShareDialog(QDialog):
 
         form = QFormLayout()
         self.role = QComboBox()
-        for key in ("uploader", "viewer", "editor", "manager", "custom"):
+        for key in ("uploader", "viewer", "contributor", "editor", "manager", "custom"):
             self.role.addItem(ROLE_TEXT[key], key)
         form.addRow("Role", self.role)
         self.boxes = {k: QCheckBox(t) for k, t in (("read", "View && download"), ("upload", "Upload"),
@@ -199,6 +288,8 @@ class ShareDialog(QDialog):
         self.expire.setEnabled(False)
         self.expire_on.toggled.connect(self.expire.setEnabled)
         form.addRow("Expiry", _w(hbox(self.expire_on, self.expire, None)))
+        self.security = SecurityBox()
+        form.addRow("Security", self.security)
         lay.addLayout(form)
         self.role.currentIndexChanged.connect(self._role_changed)
         for cb in self.boxes.values():
@@ -219,9 +310,11 @@ class ShareDialog(QDialog):
         keep = check if check is not None else self.chosen_ids()
         self.people.blockSignals(True)
         self.people.clear()
-        clients = {u["public_id"]: u for u in self.core.overview.get("clients", [])}
-        users = sorted((c for uid, c in self.core.contacts.items() if uid in clients),
-                       key=lambda c: c["name"].lower())
+        # every user on your Users list, even ones not connected yet (no device / never signed in)
+        users = sorted(({"uid": u["public_id"], "username": u["username"],
+                         "name": u.get("display_name") or u["username"]}
+                        for u in self.core.overview.get("clients", [])), key=lambda c: c["name"].lower())
+        self._fill_dropdown(users, self.core.overview.get("groups", []))
         for g in self.core.overview.get("groups", []):
             it = QListWidgetItem(icons.icon("contacts", C["info"], size=22),
                                  f"Group: {g['name']}   ({len(g['members'])} users)")
@@ -246,18 +339,69 @@ class ShareDialog(QDialog):
                 it.setCheckState(Qt.Checked if ("user", uid) in keep else Qt.Unchecked)
             self.people.addItem(it)
         if self.people.count() == 0:
-            it = QListWidgetItem("No users yet - type a user ID above and press Add")
+            it = QListWidgetItem("No users yet - add them on the Users page, or type a user ID above and press Add")
             it.setFlags(Qt.NoItemFlags)
             self.people.addItem(it)
         self.people.blockSignals(False)
         self._filter(self.filter.text())
         self._update_ok()
 
+    def _fill_dropdown(self, users: list, groups: list):
+        self.query.blockSignals(True)
+        self.query.clear()
+        for g in groups:
+            self.query.addItem(icons.icon("contacts", C["info"], size=20),
+                               f"Group: {g['name']}   ({len(g['members'])} users)", f"group:{g['id']}")
+        for c in users:
+            pid = str(c["uid"])
+            shown_id = f"{pid[:3]} {pid[3:6]} {pid[6:]}" if pid.isdigit() and len(pid) == 9 else pid
+            note = "   ·   already has access" if c["uid"] in self.have else ""
+            self.query.addItem(icons.avatar(c["name"], self.core.is_online(c["uid"]), 20),
+                               f"{c['name']}  @{c['username']}   ·   ID {shown_id}{note}", f"user:{c['uid']}")
+        self.query.setCurrentIndex(-1)
+        self.query.clearEditText()
+        self.query.blockSignals(False)
+
+    def _remove_user(self, key: str):
+        """The x in the drop-down: remove that user from your Users list (after asking)."""
+        uid = key.split(":", 1)[1]
+        u = next((c for c in self.core.overview.get("clients", []) if c["public_id"] == uid), {})
+        name = u.get("display_name") or u.get("username") or uid
+        self.query.hidePopup()
+        if not confirm(self, "Remove user", f"Remove {name} from your users?\n\nThey lose access to all your "
+                       "folders. You can add them again later by their ID.", True):
+            return self.query.showPopup()
+        keep = self.chosen_ids() - {("user", uid)}
+
+        def done(_r):
+            self.have.discard(uid)
+            self._fill(check=keep)
+            self.query.showPopup()
+        run_bg(lambda: self.core.remove_user(uid), ok=done, err=lambda e: show_error(e, self, "Remove user"))
+
+    def _picked(self, index: int):
+        """A user or group chosen from the dropdown is ticked in the list below."""
+        key = self.query.itemData(index)
+        if not key:
+            return
+        kind, ident = key.split(":", 1)
+        if kind == "group":
+            ident = int(ident)
+        if kind == "user" and ident in self.have:
+            show_error(f"{self.query.itemText(index).split('  @')[0]} already has access to this folder.", self,
+                       "Share")
+        else:
+            self._fill(check=self.chosen_ids() | {(kind, ident)})
+        self.query.setCurrentIndex(-1)
+        self.query.clearEditText()
+
     def _filter(self, text):
         t = text.strip().lower()
+        only = {1: "group", 2: "user"}.get(self.show_kind.checkedId())
         for i in range(self.people.count()):
             it = self.people.item(i)
-            it.setHidden(bool(t) and t not in it.text().lower())
+            kind = (it.data(Qt.UserRole) or (None,))[0]
+            it.setHidden((bool(t) and t not in it.text().lower()) or (only is not None and kind != only))
 
     def chosen_ids(self) -> set:
         out = set()
@@ -268,15 +412,18 @@ class ShareDialog(QDialog):
         return out
 
     def _add_by_id(self):
-        q = self.query.text().strip()
+        q = self.query.currentText().strip()
         if not q:
             return
+        idx = self.query.findText(q)
+        if idx >= 0 and self.query.itemData(idx):         # typed/selected one of your users: just tick it
+            return self._picked(idx)
         self.add_btn.setEnabled(False)
         keep = self.chosen_ids()
 
         def done(u):
             self.add_btn.setEnabled(True)
-            self.query.clear()
+            self.query.clearEditText()
             uid = u["public_id"]
             if uid in self.have:
                 show_error(f"{u.get('display_name') or u['username']} already has access to this folder.", self,
@@ -319,7 +466,7 @@ class ShareDialog(QDialog):
     def values(self):
         perms = {k: cb.isChecked() for k, cb in self.boxes.items()}
         expires = self.expire.date().toString("yyyy-MM-dd") if self.expire_on.isChecked() else None
-        return sorted(self.chosen_ids(), key=str), self.role.currentData(), perms, expires
+        return sorted(self.chosen_ids(), key=str), self.role.currentData(), perms, expires, self.security.values()
 
 
 # ================================================================== Folders (admin)
@@ -333,17 +480,35 @@ class AdminFoldersView(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self.sash = Sash("folders.side", Qt.Horizontal, collapse=0, sizes=[270, 900], minimums=[170, 420])
+        self.sash = Sash("folders.side", Qt.Horizontal, collapse=0, sizes=[310, 900], minimums=[220, 420])
         root.addWidget(self.sash)
         side = QWidget()
         side.setObjectName("SideBar")
         sl = QVBoxLayout(side)
         sl.setContentsMargins(0, 0, 0, 0)
         sl.setSpacing(0)
-        sl.addLayout(hbox(label("FOLDERS", "SideTitle"), None, tool("plus", "New folder", self.new_folder),
+        sl.addLayout(hbox(label("WORKSPACES", "SideTitle"), None, tool("plus", "New workspace", self.new_folder),
                           margins=(0, 0, 8, 0)))
-        self.list = QListWidget()
+        # workspaces with their folders as a tree: Workspace > Folder > Sub-folder ...
+        self.list = QTreeWidget()
+        self.list.setHeaderHidden(True)
+        self.list.setIndentation(16)
+        from .workspace_delegate import WorkspaceDelegate
+        self.list.setItemDelegate(WorkspaceDelegate(self))   # workspace cards + folder rows with sizes
+        self.list.setMouseTracking(True)                     # hover highlight
+        self.list.setUniformRowHeights(False)
+        self.list.setStyleSheet("QTreeView { show-decoration-selected: 0; selection-background-color: transparent; }"
+                                "QTreeView::item { padding: 0; margin: 0; background: transparent; }"
+                                "QTreeView::item:selected, QTreeView::item:hover { background: transparent; }")
+        # (no ::branch rules here: styling the branch drops Qt's expand arrow on the selected / hovered row)
+        self._disk: dict[str, tuple] = {}
+        # tree position (workspace ID, folder path inside it). A sub-folder shared on its own keeps its place in
+        # the workspace tree: _subs maps its position to its share, _sub_loc maps the share back to its position.
+        self.pos: tuple[str, str] = ("", "")
+        self._subs: dict[tuple, dict] = {}
+        self._sub_loc: dict[str, tuple] = {}
         self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur))
+        self.list.itemExpanded.connect(self._fill_children)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._folder_menu)
         sl.addWidget(self.list)
@@ -359,9 +524,9 @@ class AdminFoldersView(QWidget):
         self.fid.setStyleSheet("font-size: 16px;")
         copy = button("Copy ID", "secondary", "copy", self._copy_id, small=True)
         ml.addLayout(hbox(self.title, self.kind, None, self.fid, copy,
-                          button("Share", "primary", "plus", lambda: self.give_access(), small=True),
+                          self._share_btn(),
                           button("Settings", "secondary", "settings", self.edit_settings, small=True),
-                          button("Delete", "danger", "trash", self.delete_folder, small=True)))
+                          self._del_btn()))
         self.info = label("", muted=True, wrap=True)
         ml.addWidget(self.info)
         self.stats = label("", wrap=True)
@@ -382,14 +547,18 @@ class AdminFoldersView(QWidget):
         self.crumbs = label("", "Crumbs")
         self.btn_up = tool("up", "Up one level", self.go_up)
         from PySide6.QtWidgets import QSizePolicy
-        bar = [button("Add files", "primary", "add_file", self.add_files),
-               button("Add folder", "primary", "share", self.add_dir),
+        self.btn_upload = button("Upload", "primary", "upload")
+        up_menu = QMenu(self.btn_upload)
+        up_menu.addAction(icons.icon("add_file", C["text"], size=16), "Upload files...", self.add_files)
+        up_menu.addAction(icons.icon("new_folder", C["text"], size=16), "Upload a folder...", self.add_dir)
+        self.btn_upload.setMenu(up_menu)
+        bar = [self.btn_upload,
                button("New folder", "secondary", "new_folder", self.new_subfolder),
                button("Rename", "secondary", "rename", self.rename_selected),
                button("Delete", "danger", "trash", self.delete_selected)]
         for b in bar:
             b.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)      # never squeeze the labels
-        ml.addLayout(hbox(*bar[:2], None, *bar[2:],
+        ml.addLayout(hbox(bar[0], None, *bar[1:],
                           tool("open", "Open", self.open_selected),
                           tool("share", "Show in Explorer", self.open_local),
                           tool("refresh", "Refresh", self.reload), spacing=6))
@@ -407,8 +576,8 @@ class AdminFoldersView(QWidget):
         mm.setContentsMargins(0, 8, 0, 0)
         mm.addLayout(hbox(None, button("Give access...", "primary", "plus", self.give_access)))
         self.members = table(["User", "E-mail", "Status", "Role", "View & download", "Upload", "Edit", "Delete",
-                              "Access until", "", ""], stretch=0,
-                             fixed={4: 118, 5: 70, 6: 56, 7: 62, 9: 86, 10: 92}, row_height=42)
+                              "Access until", "Security", "", ""], stretch=0,
+                             fixed={4: 118, 5: 70, 6: 56, 7: 62, 9: 200, 10: 86, 11: 92}, row_height=42)
         mm.addWidget(self.members)
         self.tabs.addTab(mem, "Users with access")
         rec = QWidget()
@@ -433,6 +602,15 @@ class AdminFoldersView(QWidget):
         self.waiting = table(["File", "From", "Size", "Status", "Sent"], stretch=0)
         wl.addWidget(self.waiting)
         self.tabs.addTab(wait, "Waiting to arrive")
+        req = QWidget()
+        ql = QVBoxLayout(req)
+        ql.setContentsMargins(0, 8, 0, 0)
+        ql.addWidget(label("Uploads from people whose security asks for your OK. Nothing is sent before you "
+                           "accept; the sender's app starts by itself afterwards.", muted=True, wrap=True))
+        self.requests = table(["From", "File", "Size", "Asked", "", ""], stretch=1, fixed={4: 104, 5: 100},
+                              row_height=42)
+        ql.addWidget(self.requests)
+        self.tabs.addTab(req, "Requests")
         self.tabs.currentChanged.connect(lambda i: i == 2 and self._reload_waiting())
         split.addWidget(self.tabs)
         self._received_rows: list[dict] = []
@@ -442,8 +620,10 @@ class AdminFoldersView(QWidget):
         self.empty = QWidget()
         el = QVBoxLayout(self.empty)
         el.addStretch(1)
-        el.addWidget(label("Create your first folder", "PageTitle"), alignment=Qt.AlignCenter)
-        el.addWidget(button("New folder", "primary", "plus", self.new_folder), alignment=Qt.AlignCenter)
+        el.addWidget(label("Create your first workspace", "PageTitle"), alignment=Qt.AlignCenter)
+        el.addWidget(label("Then add folders to it with New folder, and Upload files or folders into them.",
+                           muted=True), alignment=Qt.AlignCenter)
+        el.addWidget(button("New workspace", "primary", "plus", self.new_folder), alignment=Qt.AlignCenter)
         el.addStretch(2)
         holder = QWidget()
         hl = QVBoxLayout(holder)
@@ -453,6 +633,68 @@ class AdminFoldersView(QWidget):
         self.sash.addWidget(holder)
         self.refresh_folders()
 
+    def _share_btn(self):
+        self.btn_share = button("Share", "primary", "plus", self.share_clicked, small=True)
+        return self.btn_share
+
+    def _del_btn(self):
+        self.btn_delete_ws = button("Delete", "danger", "trash", self.delete_folder, small=True)
+        return self.btn_delete_ws
+
+    def _update_share_btn(self):
+        shared_sub = bool(self.folder) and self.folder["folder_id"] in self._sub_loc
+        self.btn_delete_ws.setText("Stop sharing" if shared_sub else "Delete")
+        self.btn_delete_ws.setToolTip("Stop sharing this folder (it stays in the workspace)" if shared_sub
+                                      else "Remove this workspace (the files stay on your computer)")
+        sub = self.pos[1].split("/")[-1] if self.pos[1] else ""
+        self.btn_share.setText(f"Share '{sub}'" if sub else "Share")
+        self.btn_share.setToolTip(f"Share only the folder '{sub}' with your groups or users" if sub
+                                  else "Share this workspace with your groups or users")
+
+    def share_clicked(self):
+        """Share the folder selected in the tree (only that folder), or the whole workspace."""
+        return self.share_subfolder(self.pos[1]) if self.pos[1] else self.give_access()
+
+    def subshare_at(self, ws_fid: str, rel: str) -> dict | None:
+        """The share of a sub-folder shared on its own, if any (used by the tree painter)."""
+        return self._subs.get((ws_fid, rel))
+
+    def _link_subshares(self):
+        """Tell the cloud which workspace each shared folder belongs to (once per app start), so the web
+        dashboard can show it nested - also for folders shared by older versions."""
+        linked = self.__dict__.setdefault("_linked", set())
+        for sub_fid, (ws_fid, rel) in self._sub_loc.items():
+            if sub_fid in linked:
+                continue
+            linked.add(sub_fid)
+            data = {"parent": ws_fid, "subpath": rel}
+            run_bg(lambda f=sub_fid, d=data: self.core.cloud.update_folder(f, d), err=lambda _e: None)
+
+    def _index_shares(self):
+        """Workspaces = shared folders not inside another one. Shared sub-folders stay in their workspace."""
+        folders = self.core.store.list()
+        real = {}
+        for f in folders:
+            try:
+                real[f["folder_id"]] = Path(f["path"]).resolve()
+            except OSError:
+                real[f["folder_id"]] = Path(f["path"])
+        def inside(f, g):
+            return f is not g and real[g["folder_id"]] in real[f["folder_id"]].parents
+        tops = [f for f in folders if not any(inside(f, g) for g in folders)]
+        subs, loc = {}, {}
+        for f in folders:
+            ws = next((t for t in tops if inside(f, t)), None)
+            if ws is not None:
+                rel = real[f["folder_id"]].relative_to(real[ws["folder_id"]]).as_posix()
+                subs[(ws["folder_id"], rel)] = f
+                loc[f["folder_id"]] = (ws["folder_id"], rel)
+        return tops, subs, loc
+
+    def _target(self) -> tuple[Path, str]:
+        """New folder / Upload put things into the folder selected in the tree."""
+        return self._path(), self.rel
+
     def toggle_sidebar(self):
         self.sash.toggle_collapse()
 
@@ -460,44 +702,162 @@ class AdminFoldersView(QWidget):
         self.bottom.toggle_collapse()
 
     # ------------------------------------------------------------ folder list
-    def refresh_folders(self, select: str | None = None):
-        current = select or (self.folder["folder_id"] if self.folder else None)
+    def refresh_folders(self, select: str | None = None, rel: str | None = None):
+        """Rebuild the tree (workspaces > folders), keeping what was open and selected."""
+        tops, self._subs, self._sub_loc = self._index_shares()
+        self._link_subshares()
+        if select is None:
+            current, rel = (self.pos[0] or None), (self.pos[1] if rel is None else rel)
+        elif select in self._sub_loc:                 # a shared sub-folder: its place in the workspace tree
+            current, rel = self._sub_loc[select]
+        else:
+            current = select
+            if rel is None:
+                rel = self.pos[1] if select == self.pos[0] else ""
+        expanded = {tuple(it.data(0, Qt.UserRole)) for it in self._walk() if it.isExpanded()}
         self.list.blockSignals(True)
         self.list.clear()
-        chosen = None
-        for f in self.core.store.list():
-            it = QListWidgetItem(icons.folder_icon(), self._folder_label(f))
-            it.setData(Qt.UserRole, f["folder_id"])
-            it.setToolTip(f["path"])
-            self.list.addItem(it)
-            if f["folder_id"] == current:
-                chosen = it
+        for f in tops:
+            it = QTreeWidgetItem([self._folder_label(f)])
+            it.setIcon(0, icons.folder_icon())
+            it.setData(0, Qt.UserRole, (f["folder_id"], ""))
+            it.setToolTip(0, f"{f['name']}  ·  {f['folder_id']}\n{f['path']}")
+            self.list.addTopLevelItem(it)
+            self._fill_children(it)
+        todo = [self.list.topLevelItem(i) for i in range(self.list.topLevelItemCount())]
+        while todo:                               # open again what was open, and the way to the selection
+            it = todo.pop()
+            fid, r = it.data(0, Qt.UserRole)
+            on_path = fid == current and rel and (not r or rel == r or rel.startswith(r + "/"))
+            if (fid, r) in expanded or on_path:
+                self._fill_children(it)           # signals are blocked: fill it here
+                it.setExpanded(True)
+                todo.extend(it.child(i) for i in range(it.childCount()))
         self.list.blockSignals(False)
-        has = self.list.count() > 0
+        has = self.list.topLevelItemCount() > 0
         self.main_w.setVisible(has)
         self.empty.setVisible(not has)
         if has:
-            self.list.setCurrentItem(chosen or self.list.item(0))
-            self._select(self.list.currentItem())
+            chosen = self._find_item(current, rel) or self._find_item(current, "") or self.list.topLevelItem(0)
+            self.list.setCurrentItem(chosen)
+            self._select(chosen)
+
+    def _walk(self, parent=None):
+        """Every item of the tree that has been filled in so far."""
+        items = ([self.list.topLevelItem(i) for i in range(self.list.topLevelItemCount())] if parent is None
+                 else [parent.child(i) for i in range(parent.childCount())])
+        for it in items:
+            if it.data(0, Qt.UserRole):
+                yield it
+                yield from self._walk(it)
+
+    def _find_item(self, fid, rel):
+        return next((it for it in self._walk() if tuple(it.data(0, Qt.UserRole)) == (fid, rel)), None)
+
+    def _subdirs(self, f: dict, rel: str) -> list[str]:
+        try:
+            entries = list_dir(resolve_in_share(f["path"], rel), f["path"], 0, 100000)["entries"]
+        except (OSError, ValueError):
+            return []
+        return sorted((e["name"] for e in entries if e["dir"]), key=str.lower)
+
+    @staticmethod
+    def _has_subdir(path: Path) -> bool:
+        """Cheap check for the expand arrow: stops at the first sub-folder."""
+        try:
+            with os.scandir(path) as it:
+                return any(e.is_dir() for e in it)
+        except OSError:
+            return False
+
+    def _arrow(self, item, f: dict, rel: str):
+        """Show the expand arrow exactly when the folder has sub-folders."""
+        try:
+            has = self._has_subdir(resolve_in_share(f["path"], rel))
+        except ValueError:
+            has = False
+        item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator if has
+                                     else QTreeWidgetItem.DontShowIndicatorWhenChildless)
+
+    def _fill_children(self, item):
+        """Add the folders inside ``item`` (only when it is opened, so big folders stay fast)."""
+        if item.data(0, Qt.UserRole + 1):
+            return
+        item.setData(0, Qt.UserRole + 1, True)
+        self._sync_children(item)
+
+    def _sync_children(self, item):
+        """Make ``item``'s children match the folders on disk (added / removed elsewhere, e.g. by a user)."""
+        fid, rel = item.data(0, Qt.UserRole)
+        f = self.core.store.get(fid)
+        if not f:
+            return
+        names = self._subdirs(f, rel)
+        have = {item.child(i).text(0): item.child(i) for i in range(item.childCount())}
+        for name, ch in have.items():
+            if name not in names:
+                item.removeChild(ch)
+        for i, name in enumerate(names):
+            if name in have:
+                continue
+            sub = f"{rel}/{name}".strip("/")
+            ch = QTreeWidgetItem([name])
+            ch.setIcon(0, icons.folder_icon(True))
+            ch.setData(0, Qt.UserRole, (fid, sub))
+            ch.setToolTip(0, f"{f['name']}/{sub}")
+            self._arrow(ch, f, sub)                   # its own children are filled in when opened
+            item.insertChild(i, ch)
+        item.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator if names
+                                     else QTreeWidgetItem.DontShowIndicatorWhenChildless)
+
+    def _sync_tree(self):
+        """Every few seconds: arrows and folders of the visible part of the tree follow the disk."""
+        for it in list(self._walk()):
+            p, visible = it.parent(), True
+            while p is not None:
+                visible = visible and p.isExpanded()
+                p = p.parent()
+            if not visible:
+                continue
+            if it.data(0, Qt.UserRole + 1):
+                self._sync_children(it)
+            else:
+                fid, rel = it.data(0, Qt.UserRole)
+                f = self.core.store.get(fid)
+                if f:
+                    self._arrow(it, f, rel)
 
     @staticmethod
     def _folder_label(f: dict) -> str:
-        n = len(f["members"])
-        return (f"{f['name']}   ·   {size_text(SIZER.peek(f['path']))}\n"
-                f"{f['folder_id']} · {f['kind'].title()} · {n} user{'s' if n != 1 else ''}")
+        return f["name"]                          # the card itself is painted by WorkspaceDelegate
+
+    def disk_info(self, f: dict) -> tuple | None:
+        """(used, total, free) bytes of the drive the workspace is on - refreshed every few seconds."""
+        hit = self._disk.get(f["folder_id"])
+        if hit is None or time.monotonic() - hit[0] > 10:
+            try:
+                u = shutil.disk_usage(f["path"])
+                hit = (time.monotonic(), (u.used, u.total, u.free))
+            except OSError:
+                hit = (time.monotonic(), None)
+            self._disk[f["folder_id"]] = hit
+        return hit[1]
 
     def _update_sizes(self):
         """Every few seconds: new totals (files being received make the folder grow)."""
         if not self.isVisible():
             return
         folders = {f["folder_id"]: f for f in self.core.store.list()}      # list() includes the members
-        for i in range(self.list.count()):
-            it = self.list.item(i)
-            f = folders.get(it.data(Qt.UserRole))
+        for i in range(self.list.topLevelItemCount()):
+            it = self.list.topLevelItem(i)
+            f = folders.get(it.data(0, Qt.UserRole)[0])
             if f is not None:
                 text = self._folder_label(f)
-                if it.text() != text:
-                    it.setText(text)
+                if it.text(0) != text:
+                    it.setText(0, text)
+                it.setToolTip(0, f"{f['name']}  ·  {f['folder_id']}\n{f['path']}")
+        self._sync_tree()                             # arrows / folders follow the disk
+        self.list.viewport().update()                 # sizes / drive space are painted live
         if self.folder:
             self.title.setText(f"{self.folder['name']}   <span style='color:{C['muted']};font-size:14px'>"
                                f"{size_text(SIZER.peek(self.folder['path']))}</span>")
@@ -508,22 +868,91 @@ class AdminFoldersView(QWidget):
             return
         self.list.setCurrentItem(item)
         menu = QMenu(self)
+        if self.pos[1]:                                   # a folder inside the workspace
+            shared = self.subshare_at(*self.pos)
+            menu.addAction(icons.icon("new_folder", C["text"], size=16), "New folder here...", self.new_subfolder)
+            menu.addAction(icons.icon("add_file", C["text"], size=16), "Upload files here...", self.add_files)
+            menu.addAction(icons.icon("upload", C["text"], size=16), "Upload a folder here...", self.add_dir)
+            menu.addAction(icons.icon("plus", C["accent"], size=16),
+                           "Share with more people..." if shared else "Share this folder...", self.share_clicked)
+            if shared:
+                menu.addAction(icons.icon("copy", C["text"], size=16), "Copy folder ID", self._copy_id)
+                menu.addAction(icons.icon("settings", C["text"], size=16), "Settings...", self.edit_settings)
+            menu.addAction(icons.icon("open", C["text"], size=16), "Open in file explorer", self.open_local)
+            menu.addSeparator()
+            if shared:
+                menu.addAction(icons.icon("close", C["bad"], size=16), "Stop sharing this folder...",
+                               self.delete_folder)
+            else:
+                menu.addAction(icons.icon("rename", C["text"], size=16), "Rename...", self._rename_dir)
+                menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete folder...", self._delete_dir)
+            menu.exec(self.list.viewport().mapToGlobal(pos))
+            return
+        menu.addAction(icons.icon("new_folder", C["text"], size=16), "New folder...", self.new_subfolder)
         menu.addAction(icons.icon("plus", C["accent"], size=16), "Share...", lambda: self.give_access())
         menu.addAction(icons.icon("copy", C["text"], size=16), "Copy folder ID", self._copy_id)
         menu.addAction(icons.icon("open", C["text"], size=16), "Open in file explorer",
                        lambda: show_in_folder(Path(self.folder["path"])) if self.folder else None)
         menu.addAction(icons.icon("settings", C["text"], size=16), "Settings...", self.edit_settings)
         menu.addSeparator()
-        menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete folder...", self.delete_folder)
+        menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete workspace...", self.delete_folder)
         menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _tree_dir(self) -> tuple[dict, str] | None:
+        """(workspace, folder path) of the selected tree folder - None for a workspace title or a folder that
+        is shared on its own (stop sharing it first)."""
+        ws_fid, rel = self.pos
+        ws = self.core.store.get(ws_fid)
+        if not rel or ws is None:
+            return None
+        if self.subshare_at(ws_fid, rel):
+            show_error(f"'{rel.split('/')[-1]}' is shared with other people. Stop sharing it first "
+                       "(right-click > Stop sharing this folder).", self, "Folder")
+            return None
+        return ws, rel
+
+    def _rename_dir(self):
+        hit = self._tree_dir()                    # never the workspace itself
+        if hit is None:
+            return
+        ws, rel = hit
+        old = rel.split("/")[-1]
+        name, ok = QInputDialog.getText(self, "Rename folder", "New name:", text=old)
+        if ok and name.strip() and name.strip() != old:
+            src = resolve_in_share(ws["path"], rel)
+            target = src.parent / sanitize_filename(name.strip())
+            try:
+                if target.exists():
+                    raise FileExistsError(f"{target.name} already exists here")
+                src.rename(target)
+            except OSError as exc:
+                return show_error(exc, self)
+            self.refresh_folders(ws["folder_id"], "/".join(rel.split("/")[:-1] + [target.name]))
+
+    def _delete_dir(self):
+        hit = self._tree_dir()                    # never the workspace itself
+        if hit is None:
+            return
+        ws, rel = hit
+        if confirm(self, "Delete folder", f"Permanently delete the folder '{rel.split('/')[-1]}' and everything "
+                   "in it from this computer?", True):
+            try:
+                shutil.rmtree(resolve_in_share(ws["path"], rel))
+                self.core.log_activity(ws, "", "delete", rel, "deleted by the folder admin")
+            except OSError as exc:
+                return show_error(exc, self)
+            self.refresh_folders(ws["folder_id"], "/".join(rel.split("/")[:-1]))
 
     def _select(self, item):
         if item is None:
             return
-        new = self.core.store.get(item.data(Qt.UserRole))
-        if not self.folder or new["folder_id"] != self.folder["folder_id"]:
-            self.rel = ""
-        self.folder = new
+        ws_fid, rel = item.data(0, Qt.UserRole)
+        ws = self.core.store.get(ws_fid)
+        if ws is None:
+            return
+        self.pos = (ws_fid, rel)
+        sub = self.subshare_at(ws_fid, rel)          # shared on its own: show / manage its own people
+        self.folder, self.rel = (sub, "") if sub else (ws, rel)
         self.reload()
 
     def new_folder(self):
@@ -533,10 +962,8 @@ class AdminFoldersView(QWidget):
         name, path, create, settings = d.result_value
 
         def done(fid):
-            self.refresh_folders(fid)
-            self.main.flash(f"Folder created: {fid}")
-            if self.core.contacts:
-                self.give_access()
+            self.refresh_folders(fid)             # next: New folder inside it, then Upload, then Share
+            self.main.flash(f"Workspace '{name}' created ({fid}) - add folders with New folder, then Upload.")
         run_bg(lambda: self.core.create_folder(name, path, create=create, settings=settings), ok=done)
 
     def edit_settings(self):
@@ -560,9 +987,16 @@ class AdminFoldersView(QWidget):
             run_bg(lambda: self.core.update_folder(fid, data), ok=lambda _f: self.refresh_folders(fid))
 
     def delete_folder(self):
-        if self.folder and confirm(self, "Delete folder", f"Remove '{self.folder['name']}' ({self.folder['folder_id']})?"
-                                   "\n\nThe files stay on your computer; all users lose access immediately.", True):
-            fid = self.folder["folder_id"]
+        if not self.folder:
+            return
+        fid = self.folder["folder_id"]
+        if fid in self._sub_loc:                      # a shared sub-folder: only the sharing ends
+            if confirm(self, "Stop sharing", f"Stop sharing '{self.folder['name']}'?\n\nThe folder and its files "
+                       "stay in the workspace; the people it was shared with lose access immediately.", True):
+                run_bg(lambda: self.core.delete_folder(fid), ok=lambda _r: self.refresh_folders())
+            return
+        if confirm(self, "Delete workspace", f"Remove '{self.folder['name']}' ({fid})?"
+                   "\n\nThe files stay on your computer; all users lose access immediately.", True):
             self.folder = None
             run_bg(lambda: self.core.delete_folder(fid), ok=lambda _r: self.refresh_folders())
 
@@ -593,18 +1027,50 @@ class AdminFoldersView(QWidget):
         if f["form_fields"]:
             rules.append("Form: " + ", ".join(x["name"] + ("*" if x["required"] else "") for x in f["form_fields"]))
         self.info.setText("  ·  ".join(rules))
+        self._reload_requests()
         self.info.setToolTip(f["path"])
-        parts = [f["name"]] + [p for p in self.rel.split("/") if p]
+        ws = self.core.store.get(self.pos[0]) or f
+        parts = [ws["name"]] + [p for p in self.pos[1].split("/") if p]
         self.crumbs.setText("  ›  ".join(parts))
-        self.btn_up.setEnabled(bool(self.rel))
-        try:
-            self.files.set_entries(list_dir(self._path(), f["path"], 0, 100000)["entries"])
-        except OSError as exc:
-            self.files.set_entries([])
-            self.crumbs.setText(f"Folder not available: {exc}")
+        self.btn_up.setEnabled(bool(self.pos[1]))
+        self._update_share_btn()
+        self._load_files()
         self._reload_members()
         self._reload_received()
         self._reload_stats()
+
+    def _load_files(self):
+        """Right side: the files of the selected folder. With the workspace title selected: every file in
+        every folder of the workspace (named by its path), counted in the background."""
+        f, rel = self.folder, self.rel
+        key = (f["folder_id"], rel)
+        if getattr(self, "_files_key", None) != key:       # another folder: do not show the old list meanwhile
+            self.files.set_entries([])
+        self._files_key = key
+        crumbs = self.crumbs.text()
+        if self.pos[1]:                                   # a folder: its own files
+            try:
+                entries = list_dir(self._path(), f["path"], 0, 100000)["entries"]
+                self.files.set_entries([e for e in entries if not e["dir"]])     # folders are in the tree
+            except OSError as exc:
+                self.files.set_entries([])
+                self.crumbs.setText(f"Folder not available: {exc}")
+            return
+        self._files_seq = getattr(self, "_files_seq", 0) + 1
+        seq, root = self._files_seq, Path(f["path"])
+
+        def done(res):
+            if seq != self._files_seq or self._files_key != key:
+                return                                    # the user moved on
+            self.files.set_entries(res["entries"])
+            more = " (first 50,000 shown)" if res["truncated"] else ""
+            self.crumbs.setText(f"{crumbs}   ·   all files in all folders: {len(res['entries']):,}{more}")
+
+        def fail(exc):
+            if seq == self._files_seq:
+                self.files.set_entries([])
+                self.crumbs.setText(f"Folder not available: {exc}")
+        run_bg(lambda: list_files_deep(root, root), ok=done, err=fail)
 
     # ------------------------------------------------------------ received / waiting
     def _reload_received(self):
@@ -620,8 +1086,17 @@ class AdminFoldersView(QWidget):
             size = QTableWidgetItem(fmt_bytes(x["size"]))
             size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             t.setItem(r, 2, size)
-            t.setItem(r, 3, QTableWidgetItem(fmt_time(x["completed_at"])))
+            when = QTableWidgetItem(fmt_time(x["completed_at"]))
+            if x.get("deleted_at"):
+                when.setText(f"{fmt_time(x['completed_at'])}  ·  deleted by {x['deleted_by']} "
+                             f"{fmt_time(x['deleted_at'])}")
+                when.setForeground(icons_color(C["bad"]))
+                for c in (0, 1, 2):
+                    t.item(r, c).setForeground(icons_color(C["muted"]))
+            t.setItem(r, 3, when)
             t.setItem(r, 4, QTableWidgetItem(", ".join(f"{k}: {v}" for k, v in x["fields"].items()) or "-"))
+            if x.get("deleted_at"):
+                continue
             t.setCellWidget(r, 5, _cell(button("Open", "secondary", small=True,
                                                slot=lambda _=False, i=r: self._open_received(i))))
             t.setCellWidget(r, 6, _cell(button("Show in folder", "secondary", small=True,
@@ -698,28 +1173,44 @@ class AdminFoldersView(QWidget):
 
     def _open_entry(self, e):
         if e["dir"]:
-            self.rel = f"{self.rel}/{e['name']}".strip("/")
-            self.reload()
+            self._go_to(f"{self.pos[1]}/{e['name']}".strip("/"))
 
     def go_up(self):
-        self.rel = "/".join(self.rel.split("/")[:-1])
-        self.reload()
+        self._go_to("/".join(self.pos[1].split("/")[:-1]))
+
+    def _go_to(self, rel: str):
+        """Select a folder of this workspace in the tree (opening the way to it)."""
+        it = self._find_item(self.pos[0], rel)
+        if it is None:
+            return self.refresh_folders(self.pos[0], rel)
+        p = it.parent()
+        while p is not None:
+            p.setExpanded(True)
+            p = p.parent()
+        self.list.setCurrentItem(it)
 
     def open_local(self):
         if self.folder:
             show_in_folder(self._path())
 
     def new_subfolder(self):
-        name, ok = QInputDialog.getText(self, "New folder", "Folder name:")
+        if not self.folder:
+            return
+        dest, _rel = self._target()
+        where = self.crumbs.text().split("   ·   ")[0].replace("  ›  ", "/")
+        name, ok = QInputDialog.getText(self, "New folder", f"New folder inside '{where}':")
         if ok and name.strip():
             try:
-                (self._path() / sanitize_filename(name.strip())).mkdir()
+                (dest / sanitize_filename(name.strip())).mkdir()
             except OSError as exc:
                 show_error(exc, self)
-            self.reload()
+            self.refresh_folders()                    # the new folder shows in the tree under this one
+            it = self._find_item(*self.pos)
+            if it is not None:
+                it.setExpanded(True)
 
     def _copy_in(self, sources):
-        dest = self._path()
+        dest, rel = self._target()
 
         def work():
             for s in sources:
@@ -729,16 +1220,18 @@ class AdminFoldersView(QWidget):
                 shutil.copytree(s, target) if s.is_dir() else shutil.copy2(s, target)
             return len(sources)
         self.main.flash(f"Copying {len(sources)} item(s)...")
-        run_bg(work, ok=lambda n: (self.main.flash(f"Added {n} item(s)."), self.reload()),
-               err=lambda e: (show_error(e, self), self.reload()))
+        def done(n):
+            self.main.flash(f"Uploaded {n} item(s).")
+            self.refresh_folders()
+        run_bg(work, ok=done, err=lambda e: (show_error(e, self), self.reload()))
 
     def add_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Add files")
+        files, _ = QFileDialog.getOpenFileNames(self, "Upload files")
         if files:
             self._copy_in([Path(x) for x in files])
 
     def add_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Add a folder (copied)")
+        d = QFileDialog.getExistingDirectory(self, "Upload a folder")
         if d:
             self._copy_in([Path(d)])
 
@@ -756,7 +1249,7 @@ class AdminFoldersView(QWidget):
         if len(sel) == 1 and sel[0]["dir"]:
             menu.addAction(icons.folder_icon(True), "Open", lambda: self._open_entry(sel[0]))
             menu.addAction(icons.icon("plus", C["accent"], size=16), "Share this folder...",
-                           lambda: self.share_subfolder(sel[0]["name"]))
+                           lambda: self.share_subfolder(f"{self.pos[1]}/{sel[0]['name']}".strip("/")))
         else:
             menu.addAction(icons.icon("open", C["text"], size=16), "Open", self.open_selected)
         menu.addAction(icons.icon("open", C["text"], size=16), "Show in file explorer",
@@ -767,23 +1260,17 @@ class AdminFoldersView(QWidget):
         menu.addAction(icons.icon("trash", C["bad"], size=16), "Delete...", self.delete_selected)
         menu.exec(self.files.viewport().mapToGlobal(pos))
 
-    def share_subfolder(self, name: str):
-        """Share a folder inside this one with other people: it becomes its own shared folder (own ID and
-        permissions); the outer folder's members are not affected."""
-        path = (self._path() / name).resolve()
-        existing = next((f for f in self.core.store.list() if Path(f["path"]).resolve() == path), None)
-        if existing is not None:                      # already shared on its own: just open Share for it
-            self.refresh_folders(existing["folder_id"])
+    def share_subfolder(self, rel: str):
+        """Share only this folder of the workspace (``rel`` = its path inside it). Nothing is created or copied:
+        the folder stays where it is in the tree; the people get access to it alone, with their own permissions."""
+        ws_fid = self.pos[0]
+        existing = self.subshare_at(ws_fid, rel)
+        if existing is not None:                      # already shared: add people to it
+            self.refresh_folders(ws_fid, rel)
             return self.give_access()
-        if not confirm(self, "Share folder", f"Share '{name}' with other people?\n\nIt gets its own folder ID "
-                                             "and its own list of people and permissions."):
-            return
-
-        def done(fid):
-            self.refresh_folders(fid)
-            self.main.flash(f"'{name}' is now a shared folder: {fid}")
-            self.give_access()
-        run_bg(lambda: self.core.create_folder(name, path), ok=done)
+        if self.pos[1] != rel:
+            self.refresh_folders(ws_fid, rel)
+        self.give_access(sub_rel=rel)
 
     def open_selected(self):
         sel = self.files.selected_entries()
@@ -796,13 +1283,14 @@ class AdminFoldersView(QWidget):
         sel = self.files.selected_entries()
         if len(sel) != 1:
             return show_error("Select one item to rename.", self, "Rename")
-        name, ok = QInputDialog.getText(self, "Rename", "New name:", text=sel[0]["name"])
-        if ok and name.strip() and name.strip() != sel[0]["name"]:
+        src = self._path() / sel[0]["name"]                # name may be "Photos/a.jpg" in the workspace view
+        name, ok = QInputDialog.getText(self, "Rename", "New name:", text=src.name)
+        if ok and name.strip() and name.strip() != src.name:
             try:
-                target = self._path() / sanitize_filename(name.strip())
+                target = src.parent / sanitize_filename(name.strip())    # stays in its own folder
                 if target.exists():
                     raise FileExistsError(f"{target.name} already exists here")
-                (self._path() / sel[0]["name"]).rename(target)
+                src.rename(target)
             except OSError as exc:
                 show_error(exc, self)
             self.reload()
@@ -815,9 +1303,13 @@ class AdminFoldersView(QWidget):
             p = self._path() / e["name"]
             try:
                 shutil.rmtree(p) if e["dir"] else p.unlink()
+                self.core.store.mark_received_deleted(self.folder["folder_id"], p, "you")
+                self.core.log_activity(self.folder, "", "delete", f"{self.rel}/{e['name']}".strip("/"),
+                                       "deleted by the folder admin")
             except OSError as exc:
                 show_error(exc, self)
         self.reload()
+        self._reload_received()
 
     # ------------------------------------------------------------ members
     def _reload_members(self):
@@ -850,10 +1342,63 @@ class AdminFoldersView(QWidget):
             if exp and exp < dt.datetime.now().timestamp():
                 txt += " (expired)"
             self.members.setItem(r, 8, QTableWidgetItem(txt))
-            self.members.setCellWidget(r, 9, _cell(button("Resend", "secondary", small=True,
-                                                          slot=lambda _=False, uid=m["uid"]: self._resend(uid))))
-            self.members.setCellWidget(r, 10, _cell(button("Remove", "danger", small=True,
+            self.members.setCellWidget(r, 9, _cell(button(security_text(m), "link", small=True,
+                                                          slot=lambda _=False, mm=dict(m): self._edit_security(mm))))
+            self.members.setCellWidget(r, 10, _cell(button("Resend", "secondary", small=True,
+                                                           slot=lambda _=False, uid=m["uid"]: self._resend(uid))))
+            self.members.setCellWidget(r, 11, _cell(button("Remove", "danger", small=True,
                                                            slot=lambda _=False, uid=m["uid"]: self._remove(uid))))
+
+    def _edit_security(self, m):
+        d = SecurityDialog(self, m)
+        if d.exec() != QDialog.Accepted:
+            return
+        v = d.box.values()
+        fid = self.folder["folder_id"]
+        run_bg(lambda: self.core.set_member_security(fid, m["uid"], v["require_otp"], v["approve_uploads"],
+                                                     v["otp_channel"], v["delete_scope"]),
+               ok=lambda _r: (self._reload_members(), self.main.flash(f"Security updated for {m['name']}")))
+
+    # ------------------------------------------------------------ uploads waiting for my OK
+    def _reload_requests(self):
+        if not self.folder:
+            return
+        rows = self.core.upload_requests(self.folder["folder_id"])
+        t = self.requests
+        t.clearContents()
+        t.setRowCount(len(rows))
+        import datetime as dt
+        for r, q in enumerate(rows):
+            path = f"{q['dir']}/{q['name']}".strip("/")
+            t.setItem(r, 0, QTableWidgetItem(icons.avatar(q["sender"] or "?", self.core.is_online(q["uid"]), 24),
+                                             q["sender"] or q["uid"]))
+            name = QTableWidgetItem(icons.icon_for_name(q["name"], False), q["name"])
+            name.setToolTip(path)
+            t.setItem(r, 1, name)
+            t.setItem(r, 2, QTableWidgetItem(fmt_bytes(q["size"])))
+            t.setItem(r, 3, QTableWidgetItem(dt.datetime.fromtimestamp(q["created_at"]).strftime("%Y-%m-%d %H:%M")))
+            t.setCellWidget(r, 4, _cell(button("Accept", "primary", "check", small=True,
+                                               slot=lambda _=False, rid=q["req_id"]: self._decide(rid, True))))
+            t.setCellWidget(r, 5, _cell(button("Reject", "danger", "close", small=True,
+                                               slot=lambda _=False, rid=q["req_id"]: self._decide(rid, False))))
+        self.tabs.setTabText(3, f"Requests ({len(rows)})" if rows else "Requests")
+        if rows and self.tabs.tabBar() is not None:
+            self.tabs.tabBar().setTabTextColor(3, icons_color(C["warn"]))
+        elif self.tabs.tabBar() is not None:
+            self.tabs.tabBar().setTabTextColor(3, icons_color(C["muted"]))
+
+    def _decide(self, req_id, approve):
+        run_bg(lambda: self.core.decide_upload(req_id, approve),
+               ok=lambda r: (self._reload_requests(),
+                             self.main.flash(("Accepted" if approve else "Rejected") +
+                                             (f" {r['name']} - it starts now" if approve and r else
+                                              f" {r['name']}" if r else ""))))
+
+    def on_approval(self, data):
+        if self.folder and data.get("folder_id") == self.folder["folder_id"]:
+            self._reload_requests()
+            if not data.get("decided"):
+                self.tabs.setCurrentIndex(3)
 
     def _set_perms(self, uid, boxes):
         perms = dict(zip(("read", "upload", "edit", "delete"), (b.isChecked() for b in boxes)))
@@ -876,30 +1421,41 @@ class AdminFoldersView(QWidget):
         else:
             self.reload()
 
-    def give_access(self, preselect: str | None = None):
+    def give_access(self, preselect: str | None = None, sub_rel: str | None = None):
+        """Share the selected workspace / shared folder - or, with ``sub_rel``, only that folder of the workspace
+        (its sharing is set up when you press Share, not before)."""
         if not self.folder:
             return
-        d = ShareDialog(self, self.core, self.folder, preselect)
+        ws = self.core.store.get(self.pos[0])
+        target = {"name": sub_rel.split("/")[-1], "folder_id": ""} if sub_rel and ws else self.folder
+        d = ShareDialog(self, self.core, target, preselect)
         if d.exec() != QDialog.Accepted:
             return
-        chosen, role, perms, expires = d.values()
-        fid = self.folder["folder_id"]
+        chosen, role, perms, expires, security = d.values()
+        fid = target["folder_id"]
 
         def job():
+            nonlocal fid
+            if not fid:                               # only this folder: its own access list, same folder on disk
+                fid = self.core.create_folder(target["name"], resolve_in_share(ws["path"], sub_rel),
+                                              settings={"parent": ws["folder_id"], "subpath": sub_rel})
             failed = []
             for kind, ident in chosen:
                 try:
                     if kind == "group":
-                        self.core.add_group_to_folder(fid, ident, "manager" if role == "custom" else role, expires)
+                        self.core.add_group_to_folder(fid, ident, None if role == "custom" else role, expires,
+                                                      perms=perms, security=security)
                     else:
                         self.core.set_member(fid, ident, role=None if role == "custom" else role, perms=perms,
-                                             expires_at=expires)
+                                             expires_at=expires, security=security)
                 except Exception as exc:                       # keep going: share with the others
                     failed.append(f"{ident}: {exc}")
             return len(chosen) - len(failed), failed
 
         def done(res):
             ok, failed = res
+            if sub_rel and ok:
+                self.main.flash(f"Only '{target['name']}' is shared")
             self.refresh_folders(fid)
             self.main.flash(f"Shared with {ok} - they get an e-mail and see it in their app.")
             if failed:
@@ -940,7 +1496,7 @@ class UsersView(QWidget):
         top.setLayout(tl)
         tl.addWidget(label("MY USERS", "SectionTitle"))
         self.table = table(["Status", "Name", "Username", "E-mail", "ID", "Note", "Folders", "", ""], stretch=1,
-                           fixed={7: 84, 8: 92}, row_height=42)
+                           fixed={7: 96, 8: 96}, row_height=42)
         tl.addWidget(self.table, 1)
         bottom, bl = QWidget(), QVBoxLayout()
         bl.setContentsMargins(0, 6, 0, 0)
